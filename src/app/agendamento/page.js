@@ -11,7 +11,7 @@ import { initMercadoPago, Payment } from '@mercadopago/sdk-react';
 import { ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, Sparkles, ShieldCheck, Calendar as CalendarIcon, Clock, CreditCard, Lock, ChevronLeft, ChevronRight, Activity } from "lucide-react";
 
 // ==========================================
-// INICIALIZAÇÃO MERCADO PAGO
+// INICIALIZAÇÃO MERCADO PAGO (PRODUÇÃO)
 // ==========================================
 if (process.env.NEXT_PUBLIC_MP_PUBLIC_KEY) {
   initMercadoPago(process.env.NEXT_PUBLIC_MP_PUBLIC_KEY, { locale: 'pt-BR' });
@@ -54,7 +54,7 @@ const agendamentoSchema = z.object({
   horario_agendamento: z.string().optional(),
 });
 
-const PRECOS = { "Dra. Simone": 450, "Dr. Brilhante": 450, "Dr. Tiago Lima": 350, "Dr. Thiago Dyavy": 350, "Dra. Candice (Psicologia)": 200 };
+const PRECOS = { "Dra. Simone": 450, "Dr. Brilhante": 2, "Dr. Tiago Lima": 350, "Dr. Thiago Dyavy": 350, "Dra. Candice (Psicologia)": 200 };
 const HORARIOS_BASE = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
 const NOME_ETAPAS = ["Sincronização", "Identificação", "Especialidade", "Modalidade", "Agenda", "Checkout", "Concluído"];
 
@@ -95,7 +95,9 @@ function AgendamentoForm() {
     setIslandMessage(msg);
     setIslandState("error");
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => setIslandState("default"), 4000);
+    timeoutRef.current = setTimeout(() => {
+      setIslandState("default");
+    }, 4000); 
   };
   
   const setNormalIsland = () => {
@@ -103,9 +105,6 @@ function AgendamentoForm() {
     if (islandState === "error") setIslandState("default");
   };
 
-  // ==========================================
-  // ESTADOS E NAVEGAÇÃO
-  // ==========================================
   useEffect(() => {
     const saved = localStorage.getItem("egastro_agendamento");
     if (saved) {
@@ -155,9 +154,6 @@ function AgendamentoForm() {
     buscarDisponibilidade();
   }, [formData.data_agendamento, formData.medico_profissional, setValue]);
 
-  // ==========================================
-  // VALIDAÇÕES E BANCO DE DADOS
-  // ==========================================
   const checkFields = async (fields) => {
     const isValid = await trigger(fields);
     if (!isValid) {
@@ -264,16 +260,17 @@ function AgendamentoForm() {
   };
 
   // ==========================================
-  // MOTOR DE PAGAMENTO (BLINDADO CONTRA TELA BRANCA DO NEXT.JS)
-  // ==========================================
-  // ==========================================
-  // MOTOR DE PAGAMENTO (BLINDADO - DELEGA ERROS PARA A DYNAMIC ISLAND)
+  // MOTOR DE PAGAMENTO DINÂMICO
   // ==========================================
   const getValorConsulta = () => PRECOS[formData.medico_profissional] || 0;
-  const initializationMP = { amount: getValorConsulta() / 2 };
+  
+  // Calcula o valor da entrada (50%)
+  const valorEntrada = getValorConsulta() / 2;
+  
+  // Evita enviar R$ 0,00 para o Mercado Pago se der algum bug na leitura
+  const initializationMP = { amount: valorEntrada > 0 ? valorEntrada : 1 };
 
   const onSubmitMP = async (param) => {
-    // Usamos apenas o 'resolve'. Nunca o 'reject', para o Mercado Pago não destruir o próprio formulário.
     return new Promise(async (resolve) => {
       setIslandState("loading");
       
@@ -283,46 +280,54 @@ function AgendamentoForm() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
             ...param.formData, 
+            amount: valorEntrada, // <- Manda o valor real calculado
             description: `Consulta Particular - ${formData.medico_profissional}` 
           })
         });
         
+        const textResponse = await res.text();
         let data;
         try {
-          data = await res.json();
+          data = JSON.parse(textResponse);
         } catch (e) {
-          showIslandError("Erro de comunicação com a API de pagamento.");
-          resolve(); // Libera o botão de pagar para tentar de novo
+          showIslandError("Nosso servidor bloqueou a requisição. Tente novamente.");
+          resolve(); 
           return;
         }
         
         if (data.success && (data.status === "approved" || data.status === "in_process")) {
            const salvo = await salvarNoBanco(true); 
            if (!salvo) { 
-             showIslandError("Pagamento aprovado, mas falhou ao salvar. Avise a clínica."); 
-             resolve(); // Libera o botão
+             showIslandError("Pagamento APROVADO, mas o banco falhou em salvar o agendamento."); 
+             resolve();
              return; 
            }
            
            await dispararWebhook(true);
            setIslandState("success"); 
            setStep(6);
-           resolve(); // Conclui e avança
+           resolve();
+        } else if (data.success && data.status === "rejected") {
+           const recusas = {
+              cc_rejected_high_risk: "Antifraude MP: Dados suspeitos ou bloqueados.",
+              cc_rejected_duplicated_payment: "Pagamento duplicado. Aguarde ou mude o horário.",
+              cc_rejected_bad_filled_security_code: "CVV incorreto.",
+              cc_rejected_call_for_authorize: "Cartão requer autorização."
+           };
+           const motivo = recusas[data.status_detail] || `Recusado pelo banco emissor.`;
+           showIslandError(motivo);
+           resolve();
         } else {
-           // AQUI ESTÁ A MÁGICA: Mostra o erro na nossa Ilha, mas mantém o MP intacto!
-           showIslandError(data.error || "Pagamento recusado pela operadora. Verifique os dados.");
-           resolve(); // Libera o botão de pagar para o paciente tentar outro cartão
+           showIslandError(data.error || "Pagamento recusado. Verifique os dados.");
+           resolve();
         }
       } catch (error) {
-        showIslandError("Erro crítico de conexão.");
-        resolve(); // Libera o botão
+        showIslandError("Erro crítico ao comunicar com o servidor. Tente novamente.");
+        resolve(); 
       }
     });
   };
 
-  // ==========================================
-  // MOTION UI & RENDERIZAÇÃO
-  // ==========================================
   const containerVariants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.1 } }, exit: { opacity: 0, transition: { duration: 0.2 } } };
   const itemVariants = { hidden: { opacity: 0, y: 15, filter: "blur(8px)" }, show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { type: "spring", stiffness: 300, damping: 24 } } };
   const inputClass = "w-full mt-2 p-4 md:p-5 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-[#9FC131] outline-none shadow-sm transition-shadow appearance-none opacity-100 text-gray-900 placeholder:text-gray-400 font-semibold text-base";
@@ -550,7 +555,7 @@ function AgendamentoForm() {
                     </div>
                     <div className="flex justify-between items-center text-lg mb-8">
                       <span className="font-bold text-gray-900">Entrada Hoje (50%)</span>
-                      <span className="font-extrabold text-[#8eb02c] text-2xl md:text-3xl tracking-tight">R$ {(getValorConsulta() / 2).toFixed(2)}</span>
+                      <span className="font-extrabold text-[#8eb02c] text-2xl md:text-3xl tracking-tight">R$ {valorEntrada.toFixed(2)}</span>
                     </div>
 
                     <div className="w-full relative z-30 min-h-[350px]">
@@ -558,7 +563,7 @@ function AgendamentoForm() {
                         <Payment 
                           initialization={initializationMP} 
                           onSubmit={onSubmitMP} 
-                          customization={{ paymentMethods: { creditCard: 'all', debitCard: 'all', mercadoPago: 'all' } }} 
+                          customization={{ paymentMethods: { creditCard: 'all', debitCard: 'all' } }} 
                         />
                       ) : (
                         <div className="p-6 bg-red-50 text-red-600 rounded-xl border border-red-200 text-center font-medium text-sm">Chave Pública do Mercado Pago ausente.</div>
