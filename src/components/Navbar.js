@@ -1,52 +1,58 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePathname } from 'next/navigation';
-import { LogIn, Calendar, Home, Sparkles } from 'lucide-react';
+import { LogIn, Calendar, Home, Sparkles, Moon, Sun } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
 // ==========================================
-// CONFIGURAÇÕES DE FÍSICA (Framer Motion)
+// CONFIGURAÇÕES DE FÍSICA (Framer Motion - Vercel/Linear Style)
 // ==========================================
 const liquidSpring = { type: "spring", stiffness: 400, damping: 30, mass: 0.8 };
 const energeticSpring = { type: "spring", stiffness: 500, damping: 25, mass: 1 };
 
 // ==========================================
-// COMPONENTE: DOCK ITEM (MOBILE)
+// COMPONENTE: DOCK ITEM (MOBILE) - Ultra Premium iOS
 // ==========================================
 const DockItem = ({ href, icon: Icon, label }) => {
   const pathname = usePathname();
   const isAtivo = pathname === href;
 
   return (
-    <Link href={href} className="relative flex flex-col items-center justify-center w-16 h-[60px] outline-none group z-10">
+    <Link 
+      href={href} 
+      className="relative flex flex-col items-center justify-center w-14 h-[56px] outline-none group z-10"
+    >
       {isAtivo && (
         <motion.div 
           layoutId="mobile-dock-pill" 
           transition={liquidSpring} 
-          className="absolute inset-0 mx-1 my-1.5 bg-white shadow-[0_4px_12px_rgba(0,0,0,0.05)] rounded-[18px] border border-white/60 -z-10" 
+          className="absolute inset-0 mx-1 my-1 bg-black/5 dark:bg-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] rounded-[16px] border border-white/40 dark:border-white/10 -z-10" 
         />
       )}
       
       <motion.div 
         animate={{ 
           y: isAtivo ? -2 : 0,
-          scale: isAtivo ? 1.1 : 1,
-          color: isAtivo ? '#9FC131' : '#9CA3AF' 
+          scale: isAtivo ? 1.05 : 1,
         }} 
         transition={energeticSpring}
         className="relative z-10 flex flex-col items-center"
       >
-        <Icon size={22} strokeWidth={isAtivo ? 2.5 : 2} className="drop-shadow-sm" />
+        <Icon 
+          size={22} 
+          strokeWidth={isAtivo ? 2 : 1.5} 
+          className={`transition-colors duration-300 ${isAtivo ? "text-[#9FC131] drop-shadow-[0_2px_8px_rgba(159,193,49,0.3)]" : "text-slate-400 dark:text-slate-500"}`} 
+        />
         <AnimatePresence>
           {isAtivo && (
             <motion.span 
               initial={{ opacity: 0, scale: 0.5, y: 5 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.5, y: 5 }}
-              className="absolute -bottom-3.5 text-[9px] font-black uppercase tracking-widest text-[#9FC131]"
+              className="absolute -bottom-3.5 text-[8px] font-black uppercase tracking-widest text-[#9FC131]"
             >
               {label}
             </motion.span>
@@ -58,66 +64,143 @@ const DockItem = ({ href, icon: Icon, label }) => {
 };
 
 // ==========================================
+// COMPONENTE: SIDEBAR ITEM (DESKTOP)
+// ==========================================
+const SidebarItem = ({ href, icon: Icon, label }) => {
+  const pathname = usePathname();
+  const isAtivo = pathname === href;
+
+  return (
+    <Link 
+      href={href} 
+      className="relative flex items-center w-full outline-none group z-10 py-3 px-4 rounded-2xl mb-1"
+    >
+      {isAtivo && (
+        <motion.div 
+          layoutId="desktop-sidebar-pill" 
+          transition={liquidSpring} 
+          className="absolute inset-0 bg-slate-100 dark:bg-[#162035] shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] rounded-2xl border border-slate-200 dark:border-slate-800/80 -z-10" 
+        />
+      )}
+      
+      <motion.div 
+        animate={{ x: isAtivo ? 4 : 0 }} 
+        transition={energeticSpring}
+        className="relative z-10 flex items-center gap-3 w-full"
+      >
+        <Icon 
+          size={20} 
+          strokeWidth={isAtivo ? 2.5 : 2} 
+          className={isAtivo ? "text-[#9FC131]" : "text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors"} 
+        />
+        <span 
+          className={`text-sm font-bold tracking-wide transition-colors ${isAtivo ? "text-slate-900 dark:text-white" : "text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white"}`}
+        >
+          {label}
+        </span>
+      </motion.div>
+    </Link>
+  );
+};
+
+// ==========================================
 // COMPONENTE PRINCIPAL: NAVBAR ORQUESTRADA
 // ==========================================
 export default function Navbar() {
-  const pathname = usePathname();
+  const [isDark, setIsDark] = useState(false);
+
+  // Controle de Tema Robusto com LocalStorage
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+      setIsDark(true);
+      document.documentElement.classList.add('dark');
+    } else {
+      setIsDark(false);
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const nextState = !isDark;
+    setIsDark(nextState);
+    if (nextState) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
 
   return (
     <>
       {/* ======================================= */}
-      {/* HEADER DESKTOP (LIQUID GLASS) */}
+      {/* SIDEBAR DESKTOP (PREMIUM SAAS STYLE) */}
       {/* ======================================= */}
-      <motion.header 
-        initial={{ y: -100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+      <motion.aside 
+        initial={{ x: -50, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
         transition={{ ...liquidSpring, delay: 0.1 }}
-        className="hidden md:flex fixed top-0 left-0 right-0 z-[100] h-24 select-none pointer-events-none"
+        className="hidden md:flex flex-col fixed inset-y-0 left-0 w-[280px] z-[100] bg-white/80 dark:bg-[#0D1424]/80 backdrop-blur-3xl border-r border-slate-200 dark:border-[#1E293B]/60 p-6 shadow-[20px_0_40px_rgba(0,0,0,0.02)] dark:shadow-[20px_0_40px_rgba(0,0,0,0.4)]"
       >
-        {/* Máscara de desfoque gradiente (Vercel Style) */}
-        <div className="absolute inset-0 bg-white/60 backdrop-blur-[20px] [mask-image:linear-gradient(to_bottom,black_60%,transparent_100%)] pointer-events-none" />
-        <div className="absolute bottom-4 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-gray-200/50 to-transparent" />
-
-        <div className="max-w-[1400px] w-full mx-auto h-full px-8 flex items-center justify-between relative z-10 pointer-events-auto pb-4">
-          
-          {/* Logo Magnético */}
+        <div className="mb-12 mt-2 px-4">
           <Link href="/">
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} transition={energeticSpring} className="relative group">
-              <div className="absolute inset-0 bg-white/50 blur-xl rounded-full group-hover:bg-[#9FC131]/20 transition-all duration-500" />
-              <Image src="/logo-egastro.png" alt="Clínica E-Gastro" width={90} height={50} className="relative object-contain drop-shadow-sm" />
+            <motion.div 
+              whileHover={{ scale: 1.02 }} 
+              whileTap={{ scale: 0.98 }} 
+              transition={energeticSpring} 
+              className="relative group inline-block"
+            >
+              <div className="absolute inset-0 bg-[#9FC131]/10 blur-2xl rounded-full group-hover:bg-[#9FC131]/30 transition-all duration-500" />
+              <Image 
+                src="/logo-egastro.png" 
+                alt="Clínica E-Gastro" 
+                width={120} 
+                height={50} 
+                className="relative object-contain dark:brightness-0 dark:invert transition-all duration-300" 
+              />
             </motion.div>
           </Link>
-
-          {/* Botões Desktop Orquestrados */}
-          <div className="flex items-center gap-4 bg-white/40 p-1.5 rounded-full border border-white/60 shadow-[0_8px_30px_rgba(0,0,0,0.04)] backdrop-blur-2xl">
-            <Link href="/login">
-              <motion.button 
-                whileHover={{ scale: 1.02, backgroundColor: "rgba(255,255,255,0.9)" }}
-                whileTap={{ scale: 0.96 }}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-black text-gray-600 uppercase tracking-widest transition-all"
-              >
-                <LogIn size={16} /> <span>Restrito</span>
-              </motion.button>
-            </Link>
-
-            <Link href="/agendamento">
-              <motion.button 
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.96 }}
-                className="group relative flex items-center gap-2 px-8 py-2.5 rounded-full text-xs font-black text-white uppercase tracking-widest bg-gray-900 shadow-[0_10px_20px_rgba(0,0,0,0.1)] overflow-hidden"
-              >
-                {/* Efeito Sweep (Brilho passando) no botão */}
-                <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12" />
-                <Calendar size={16} className="text-[#9FC131]" /> 
-                <span className="relative z-10">Agendar</span>
-              </motion.button>
-            </Link>
-          </div>
         </div>
-      </motion.header>
+
+        <nav className="flex-1 flex flex-col gap-1">
+          <SidebarItem href="/" icon={Home} label="Início" />
+          <SidebarItem href="/agendamento" icon={Calendar} label="Agendamentos" />
+        </nav>
+
+        <div className="flex flex-col gap-3 mt-auto pt-6 border-t border-slate-200 dark:border-slate-800">
+          <button 
+            onClick={toggleTheme}
+            className="flex items-center gap-3 w-full py-3 px-4 rounded-2xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#162035] transition-all"
+          >
+            {isDark ? <Sun size={20} strokeWidth={2} /> : <Moon size={20} strokeWidth={2} />}
+            <span className="text-sm font-bold tracking-wide">
+              {isDark ? "Modo Claro" : "Modo Escuro"}
+            </span>
+          </button>
+
+          <Link href="/login" className="w-full">
+            <motion.button 
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="flex items-center justify-between w-full p-4 rounded-2xl text-slate-900 dark:text-white bg-slate-100 dark:bg-[#162035] border border-slate-200 dark:border-slate-800 shadow-sm transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[#9FC131]/20 flex items-center justify-center">
+                  <LogIn size={14} className="text-[#9FC131]" />
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest">Acesso Admin</span>
+              </div>
+            </motion.button>
+          </Link>
+        </div>
+      </motion.aside>
 
       {/* ======================================= */}
-      {/* DOCK MOBILE (ESTILO iOS NATIVO PREMIUM) */}
+      {/* DOCK MOBILE (LIQUID GLASS iOS STYLE) */}
       {/* ======================================= */}
       <motion.div 
         initial={{ y: 100, opacity: 0 }}
@@ -125,42 +208,42 @@ export default function Navbar() {
         transition={{ ...liquidSpring, delay: 0.2 }}
         className="md:hidden fixed bottom-6 left-0 right-0 z-[100] flex justify-center pointer-events-none px-4"
       >
-        <div className="relative flex items-center p-2 rounded-[24px] bg-white/70 backdrop-blur-[40px] saturate-[1.5] border border-white/80 shadow-[0_20px_50px_rgba(0,0,0,0.1),inset_0_2px_4px_rgba(255,255,255,0.9)] pointer-events-auto gap-2">
+        <div className="relative flex items-center p-1.5 rounded-full bg-white/40 dark:bg-[#0D1424]/50 backdrop-blur-[50px] saturate-[2] border border-white/50 dark:border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.1)] dark:shadow-[0_30px_60px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.05)] pointer-events-auto gap-1">
           
           <DockItem href="/" icon={Home} label="Início" />
           
-          {/* BOTÃO CENTRAL (O Coração da Interface) */}
-          <Link href="/agendamento" className="relative outline-none z-20 group mx-2">
+          <Link href="/agendamento" className="relative outline-none z-20 group mx-1">
             <motion.div 
-              whileTap={{ scale: 0.9 }}
-              className="relative flex items-center justify-center w-[68px] h-[60px]"
+              whileTap={{ scale: 0.9 }} 
+              className="relative flex items-center justify-center w-[56px] h-[50px]"
             >
-              {/* Brilho pulsante no fundo */}
               <motion.div 
-                animate={{ scale: [1, 1.1, 1], opacity: [0.5, 0.8, 0.5] }} 
+                animate={{ scale: [1, 1.1, 1], opacity: [0.4, 0.7, 0.4] }} 
                 transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute inset-0 bg-[#9FC131]/30 blur-md rounded-[20px]" 
+                className="absolute inset-0 bg-[#9FC131]/40 blur-xl rounded-full" 
               />
-              
-              {/* O Botão de fato */}
-              <div className="relative flex items-center justify-center w-full h-full bg-gradient-to-br from-[#9FC131] to-[#8eb02c] rounded-[20px] shadow-[0_8px_20px_rgba(159,193,49,0.4),inset_0_2px_4px_rgba(255,255,255,0.3)] border border-[#b2d636]/50">
-                <Sparkles size={14} className="absolute top-1.5 right-1.5 text-white/70" />
-                <Calendar size={26} className="text-white" strokeWidth={2} />
+              <div className="relative flex items-center justify-center w-full h-full bg-gradient-to-br from-[#9FC131] to-[#7f9c24] rounded-full shadow-[0_8px_15px_rgba(159,193,49,0.3)] border border-[#b2d636]/60">
+                <Sparkles size={11} className="absolute top-1.5 right-1.5 text-white/70 dark:text-[#090D16]/50" />
+                <Calendar size={22} className="text-white dark:text-[#090D16]" strokeWidth={2} />
               </div>
             </motion.div>
           </Link>
           
-          <DockItem href="/login" icon={LogIn} label="Admin" />
+          <button 
+            onClick={toggleTheme} 
+            className="relative flex flex-col items-center justify-center w-14 h-[56px] outline-none group z-10"
+          >
+             <motion.div whileTap={{ scale: 0.9 }} className="relative z-10 flex flex-col items-center">
+                {isDark ? (
+                  <Sun size={22} strokeWidth={1.5} className="text-slate-400 dark:text-slate-500" />
+                ) : (
+                  <Moon size={22} strokeWidth={1.5} className="text-slate-400 dark:text-slate-500" />
+                )}
+             </motion.div>
+          </button>
 
         </div>
       </motion.div>
-
-      {/* Tailwind Custom Keyframes para o Shimmer Effect */}
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes shimmer {
-          100% { transform: translateX(100%); }
-        }
-      `}} />
     </>
   );
 }
