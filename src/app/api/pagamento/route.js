@@ -23,10 +23,13 @@ export async function POST(request) {
         payment_method_id: body.payment_method_id,
         issuer_id: body.issuer_id,
         payer: {
-          email: body.payer.email,
+          // Uso de navegação opcional (?.) para evitar quebras se o objeto não for enviado
+          email: body.payer?.email || '',
+          first_name: body.payer?.first_name || '',
+          last_name: body.payer?.last_name || '',
           identification: {
-            type: body.payer.identification.type,
-            number: body.payer.identification.number,
+            type: body.payer?.identification?.type || 'CPF',
+            number: body.payer?.identification?.number || '',
           },
         },
       },
@@ -37,7 +40,9 @@ export async function POST(request) {
       success: true,
       status: response.status,
       status_detail: response.status_detail,
-      id: response.id 
+      id: response.id,
+      // Retorna os dados do Pix (QR Code e Copia/Cola) para o frontend exibir
+      transaction_data: response.point_of_interaction?.transaction_data 
     }, { status: 201 });
 
   } catch (error) {
