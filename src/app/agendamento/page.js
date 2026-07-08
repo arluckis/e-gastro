@@ -12,7 +12,7 @@ import axios from "axios";
 import { 
   ArrowRight, CheckCircle, AlertTriangle, Activity, User, 
   HeartPulse, Search, Pencil, ChevronLeft, ChevronRight, 
-  ShieldCheck, CreditCard, Calendar as CalendarIcon 
+  ShieldCheck, CreditCard, Calendar as CalendarIcon, RefreshCw
 } from "lucide-react";
 
 import Navbar from "@/components/Navbar";
@@ -27,25 +27,17 @@ if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_MP_PUBLIC_KEY) {
 
 const URL_WEBHOOK_PUSH = "https://acessoapi.rmchat.com.br/w/875a4a21-8b19-42f1-97d7-d420f72f4310";
 
-const dispararPushRmChat = async (telefonePaciente, nomePaciente) => {
+const dispararPushRmChat = async (telefonePaciente, nomePaciente, textoPersonalizado) => {
   try {
     const numeroLimpo = "55" + telefonePaciente.replace(/\D/g, "");
-    console.log("🚀 Disparando Push para o RM Chat...", { nome: nomePaciente, numero: numeroLimpo });
-
     const payload = {
       name: nomePaciente,
-      number: numeroLimpo
+      number: numeroLimpo,
+      texto: textoPersonalizado 
     };
-
-    const response = await axios.post(URL_WEBHOOK_PUSH, payload, {
-      headers: { 'Content-Type': 'application/json' }
-    });
-    
-    console.log("✅ Paciente injetado no RM Chat com sucesso via Push!", response.data);
-    return response.data;
-
+    await axios.post(URL_WEBHOOK_PUSH, payload, { headers: { 'Content-Type': 'application/json' } });
   } catch (error) {
-    console.error("❌ Falha ao enviar Push para o RM Chat:", error?.response?.data || error.message);
+    console.error("❌ Falha RM Chat:", error);
   }
 };
 
@@ -69,7 +61,7 @@ const HORARIOS_BASE = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15
 const NOME_ETAPAS = ["Sincronização", "Identificação", "Especialidade", "Modalidade", "Agenda", "Checkout", "Concluído"];
 
 // ==========================================
-// 2. MÁSCARAS E VALIDAÇÕES (ZOD)
+// 2. MÁSCARAS E VALIDAÇÕES
 // ==========================================
 const masks = {
   cpf: (v) => v.replace(/\D/g, "").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})/, "$1-$2").replace(/(-\d{2})\d+?$/, "$1"),
@@ -110,6 +102,99 @@ const schema = z.object({
 });
 
 // ==========================================
+// LÓGICA DE AGENDAMENTO (SUPABASE FILA)
+// ==========================================
+const gerarData = (dataBase, horarioBase, diasSubtrair, horaEspecifica) => {
+  const d = new Date(`${dataBase}T12:00:00-03:00`); 
+  d.setDate(d.getDate() - diasSubtrair);
+  if (horaEspecifica) {
+    const [h, m] = horaEspecifica.split(':');
+    d.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
+  } else if (horarioBase) {
+    const [h, m] = horarioBase.split(':');
+    d.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
+  }
+  return d.toISOString();
+};
+
+const programarMensagensMedicas = async (formData) => {
+  const { nome, telefone_whatsapp, data_agendamento, horario_agendamento, tipo_servico, subtipo_exame, data_nascimento } = formData;
+  let mensagens = [];
+  const dataFormatada = data_agendamento.split("-").reverse().join("/");
+
+  mensagens.push({
+    telefone_whatsapp, nome_paciente: nome,
+    data_hora_programada: gerarData(data_agendamento, horario_agendamento, 0, `${(parseInt(horario_agendamento.split(':')[0]) + 2).toString().padStart(2, '0')}:00`),
+    mensagem: `Olá, ${nome}! Agradecemos muito por escolher nossa clínica para o seu atendimento.\n\nSua opinião é fundamental para nós! Poderia tirar 1 minutinho para avaliar nosso atendimento?\n\nAcesse o link: https://share.google/uFFEOKCkCvbxZMRKU`
+  });
+
+  if (tipo_servico === "Consulta" || tipo_servico === "Retorno") {
+    mensagens.push({
+      telefone_whatsapp, nome_paciente: nome,
+      data_hora_programada: gerarData(data_agendamento, null, 1, "08:00"),
+      mensagem: `Olá, ${nome}! Passando para lembrar da sua consulta agendada para amanhã, dia ${dataFormatada} às ${horario_agendamento}. Por favor, responda esta mensagem para confirmar sua presença.`
+    });
+  }
+
+  if (tipo_servico === "Exame") {
+    mensagens.push({
+      telefone_whatsapp, nome_paciente: nome,
+      data_hora_programada: gerarData(data_agendamento, null, 2, "08:00"),
+      mensagem: `Olá, ${nome}! Seu exame se aproxima. Ele está agendado para o dia ${dataFormatada}.\n\nCaso tenha alguma dúvida sobre o preparo que enviamos anteriormente, nos chame aqui!`
+    });
+
+    if (helpers.calcAge(data_nascimento) >= 65) {
+      mensagens.push({
+        telefone_whatsapp, nome_paciente: nome,
+        data_hora_programada: new Date(Date.now() + 60000).toISOString(), 
+        mensagem: `Olá, ${nome}! Notamos em seu cadastro que você possui 65 anos ou mais. ⚠️ Gostaríamos de lembrar que, pela sua segurança, é obrigatório passar por uma consulta prévia com um cardiologista ou anestesista antes de realizar este exame. Por favor, envie a liberação médica por aqui.`
+      });
+    }
+
+    if (subtipo_exame === "Endoscopia Digestiva Alta") {
+      mensagens.push({
+        telefone_whatsapp, nome_paciente: nome, data_hora_programada: new Date(Date.now() + 120000).toISOString(),
+        mensagem: `Olá, ${nome}. Sua Endoscopia foi pré-agendada! 📝\n\n*Orientações Importantes:*\n- É obrigatório jejum para o exame;\n- Venha com um acompanhante maior de 18 anos;\n- 🛑 *ATENÇÃO:* Se você faz uso de medicamentos para emagrecimento (Mounjaro, Ozempic, Wegovy), eles devem ser suspensos por 15 dias antes do exame.`
+      });
+      mensagens.push({
+        telefone_whatsapp, nome_paciente: nome, data_hora_programada: gerarData(data_agendamento, null, 3, "08:00"),
+        mensagem: `Olá, ${nome}! Fique atento ao preparo da sua Endoscopia daqui a 3 dias.\n\nReforçamos a necessidade de jejum absoluto no dia e a presença obrigatória de um acompanhante maior de idade. Você faz uso de alguma medicação diária contínua? Se sim, nos informe por aqui.`
+      });
+      mensagens.push({
+        telefone_whatsapp, nome_paciente: nome, data_hora_programada: gerarData(data_agendamento, null, 1, "08:00"),
+        mensagem: `Olá, ${nome}! Seu exame é amanhã. Atenção à regra do jantar de hoje:\n\n🥩 Se o jantar tiver carne: O jejum deve começar 12 horas antes do exame.\n🥗 Se o jantar NÃO tiver carne: O jejum deve começar 8 horas antes do exame.`
+      });
+      mensagens.push({
+        telefone_whatsapp, nome_paciente: nome, data_hora_programada: gerarData(data_agendamento, null, 1, "20:00"),
+        mensagem: `Boa noite, ${nome}! Lembre-se de iniciar o seu jejum agora ou nas próximas horas, dependendo do que você jantou (conforme nossa mensagem anterior).\n\n💧 O consumo de água ou água de coco está liberado apenas até 3 horas antes do horário do seu exame.`
+      });
+      mensagens.push({
+        telefone_whatsapp, nome_paciente: nome, data_hora_programada: gerarData(data_agendamento, null, 0, "06:00"),
+        mensagem: `Bom dia, ${nome}! Hoje é o dia do seu exame.\n\n⚠️ A partir de agora, o jejum é TOTAL (inclusive água e chicletes).\n\n*Lembretes:* Venha com roupas leves, sem joias ou metais, traga um documento com foto e venha acompanhado por um maior de idade.\n📍 Nossa localização: [Inserir Link do Maps]`
+      });
+    }
+
+    if (subtipo_exame === "Colonoscopia") {
+      mensagens.push({
+        telefone_whatsapp, nome_paciente: nome, data_hora_programada: new Date(Date.now() + 120000).toISOString(),
+        mensagem: `Olá, ${nome}! Segue o guia de preparo OBRIGATÓRIO para sua Colonoscopia:\n\n⏳ *3 DIAS ANTES:*\nSuspenda sementes, amendoim, nozes, castanhas e cereais integrais (linhaça, aveia, etc).\n\n⏳ *1 DIA ANTES (VÉSPERA):*\n- Dieta leve permitida APENAS até o almoço;\n- Após o almoço: PROIBIDO alimentos sólidos. Apenas líquidos claros (água, água de coco, Gatorade de laranja/limão);\n- Às 11:00h: Tomar 3 comprimidos de Dulcolax ou Bisacodil (Idosos: 2; Em caso de diarreia: 1);\n- Às 18:00h: Tomar 2 sachês de Picoprep + Simeticona dissolvidos.\n\n⏳ *DIA DO EXAME (6 a 8 horas antes):*\n- Tomar mais 2 sachês de Picoprep + Simeticona;\n- Jejum completo para alimentos sólidos.\n- Líquidos claros permitidos apenas até 3 horas antes do exame.`
+      });
+    }
+
+    if (subtipo_exame === "Retirada de Balão Gástrico") {
+      mensagens.push({
+        telefone_whatsapp, nome_paciente: nome, data_hora_programada: new Date(Date.now() + 120000).toISOString(),
+        mensagem: `Olá, ${nome}! Segue o protocolo para a retirada do seu Balão Gástrico:\n\n📅 *1 SEMANA ANTES:* Tomar 1 cápsula de Fluconazol 150mg.\n📅 *3 DIAS ANTES:* Iniciar dieta ESTRITA apenas com líquidos restritos (sem leite, sem gelatina, apenas caldo coado). Tomar 1 litro de Coca-Cola Zero por dia. 🚫 Proibido proteínas ou suplementos.\n📅 *VÉSPERA:* Tomar Digesan (cápsula ou 35 gotas) 3 vezes ao dia.\n📅 *DIA DO PROCEDIMENTO:* Jejum de alimentos de 12 horas (água liberada até 3 horas antes). Medicações de pressão, diabetes e tireoide podem ser tomadas normalmente. Comparecimento OBRIGATÓRIO com um responsável.`
+      });
+    }
+  }
+
+  if(mensagens.length > 0){
+     await supabase.from('fila_mensagens').insert(mensagens);
+  }
+};
+
+// ==========================================
 // 3. COMPONENTE PRINCIPAL (PAGE)
 // ==========================================
 export default function AgendamentoPremium() {
@@ -138,8 +223,14 @@ function AgendamentoForm() {
   const [islandState, setIslandState] = useState("default");
   const [islandMessage, setIslandMessage] = useState("");
   const timeoutRef = useRef(null);
+  const timeSlotsRef = useRef(null); 
   
   const [pixData, setPixData] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const checkingRef = useRef(false);
+  const timeLeftRef = useRef(timeLeft);
+
+  useEffect(() => { timeLeftRef.current = timeLeft; }, [timeLeft]);
 
   const [context, setContext] = useState({ isSmartLink: false, personalizedName: "", dataUltimaConsulta: null, userFound: false, checkingUser: false });
   const [calendarMonth, setCalendarMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -161,6 +252,21 @@ function AgendamentoForm() {
     if (!["loading", "success"].includes(type) && step !== 6) timeoutRef.current = setTimeout(() => setIslandState("default"), 3000);
   };
 
+  const isStepValid = () => {
+    if (step === 0) return true;
+    if (step === 1) return formData.cpf?.length === 14 && formData.nome?.length > 1 && formData.sobrenome?.length > 1 && formData.telefone_whatsapp?.length >= 14 && helpers.isValidDate(formData.data_nascimento) && formData.email?.includes('@');
+    if (step === 2) {
+      if (flags.exibirConfUri && !flags.confirmouUri) return false;
+      if (!formData.tipo_servico) return false;
+      if (["Consulta", "Retorno"].includes(formData.tipo_servico) && !formData.medico_profissional) return false;
+      if (formData.tipo_servico === "Exame" && !formData.subtipo_exame) return false;
+      return true;
+    }
+    if (step === 3) return formData.modalidade || formData.tipo_servico === "Retorno";
+    if (step === 4) return formData.data_agendamento && formData.horario_agendamento;
+    return false;
+  };
+
   useEffect(() => {
     const saved = localStorage.getItem("egastro_agendamento");
     if (saved) try { const { step: s, data } = JSON.parse(saved); if (s >= 0 && s < 6) { setStep(s); reset(data); } } catch (e) {}
@@ -169,6 +275,12 @@ function AgendamentoForm() {
   useEffect(() => {
     step < 6 ? localStorage.setItem("egastro_agendamento", JSON.stringify({ step, data: formData })) : localStorage.removeItem("egastro_agendamento");
   }, [step, formData]);
+
+  useEffect(() => {
+    if (formData.data_agendamento && window.innerWidth < 768 && timeSlotsRef.current) {
+      setTimeout(() => { timeSlotsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300);
+    }
+  }, [formData.data_agendamento]);
 
   useEffect(() => {
     const nomeUrl = searchParams.get("nome"), cpfUrl = searchParams.get("cpf"), medicoUrl = searchParams.get("medico"), wppUrl = searchParams.get("whatsapp");
@@ -306,7 +418,12 @@ function AgendamentoForm() {
         if (formData.tipo_servico === "Retorno" && context.dataUltimaConsulta && Math.ceil(Math.abs(new Date(formData.data_agendamento) - context.dataUltimaConsulta) / 86400000) > 30) return showIsland("Prazo excedido (> 30 dias).");
         
         if (formData.tipo_servico === "Retorno" || formData.modalidade === "Convênio") {
-          if (await salvarNoBanco(false)) { await dispararWebhook(false); showIsland("Agendamento Finalizado", "success"); return setStep(6); }
+          if (await salvarNoBanco(false)) { 
+            await dispararWebhook(false); 
+            await programarMensagensMedicas(formData); 
+            showIsland("Agendamento Finalizado", "success"); 
+            return setStep(6); 
+          }
           return showIsland("Erro ao salvar.");
         }
         return setStep(5);
@@ -329,42 +446,45 @@ function AgendamentoForm() {
             email: mpPayer.email || formData.email,
             first_name: mpPayer.first_name || formData.nome,
             last_name: mpPayer.last_name || formData.sobrenome,
-            identification: mpPayer.identification || {
-              type: "CPF",
-              number: formData.cpf ? formData.cpf.replace(/\D/g, "") : ""
-            }
+            identification: mpPayer.identification || { type: "CPF", number: formData.cpf ? formData.cpf.replace(/\D/g, "") : "" }
           }
         };
 
-        const res = await fetch("/api/pagamento", { 
-          method: "POST", 
-          headers: { "Content-Type": "application/json" }, 
-          body: JSON.stringify(payload) 
-        });
+        const res = await fetch("/api/pagamento", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         const data = await res.json();
         
-        // Verifica se aprovado (cartão) OU pendente (PIX)
         if (data.success && ["approved", "in_process", "pending"].includes(data.status)) {
-           
            const isPix = data.status === "pending";
+           
+           if (!(await salvarNoBanco(!isPix))) { showIsland("Erro ao gerar agendamento."); return resolve(); }
 
-           // Salva a vaga no banco (Se for PIX, salva como NÃO pago para apenas pré-reservar a vaga)
-           if (!(await salvarNoBanco(!isPix))) { 
-             showIsland("Erro ao gerar agendamento."); 
-             return resolve(); 
-           }
+           const telefonePaciente = formData.telefone_whatsapp;
+           const nomePaciente = `${formData.nome} ${formData.sobrenome}`.trim();
+           const dataFormatada = formData.data_agendamento.split("-").reverse().join("/");
 
-           // Se NÃO for Pix (ou seja, se for Cartão Aprovado), dispara a confirmação imediatamente
            if (!isPix) {
              await dispararWebhook(true);
-             const telefonePaciente = formData.telefone_whatsapp;
-             const nomePaciente = `${formData.nome} ${formData.sobrenome}`.trim();
-             await dispararPushRmChat(telefonePaciente, nomePaciente);
+             await programarMensagensMedicas(formData);
+             
+             await dispararPushRmChat(
+               telefonePaciente, 
+               nomePaciente, 
+               `✅ Pagamento recebido com sucesso, ${nomePaciente}!\n\nSua consulta está confirmada para o dia ${dataFormatada} às ${formData.horario_agendamento}.\n\nAguardamos você!`
+             );
              showIsland("Pagamento Aprovado", "success");
            } else {
-             // Se for Pix, salva apenas os dados do QR Code na tela e NÃO dispara push/webhook agora
              if (data.transaction_data) {
-               setPixData(data.transaction_data);
+               setPixData({ ...data.transaction_data, payment_id: data.id });
+               setTimeLeft(300); // 5 minutos de janela para escutar
+               
+               const limitDate = new Date(Date.now() + 5 * 60000);
+               const hora_limite = `${String(limitDate.getHours()).padStart(2, '0')}:${String(limitDate.getMinutes()).padStart(2, '0')}`;
+               
+               await dispararPushRmChat(
+                 telefonePaciente, 
+                 nomePaciente, 
+                 `Olá, ${nomePaciente}! ⏳ Falta pouco para garantir seu agendamento.\n\nPor favor, realize o pagamento via Pix em até 5 minutos (até as ${hora_limite} para finalizar).\n\n🔹 *Chave Pix (Copia e Cola):*\n${data.transaction_data.qr_code}\n\nAssim que o pagamento for processado, você receberá a confirmação automática da sua consulta.`
+               );
              }
              showIsland("Pix gerado com sucesso!", "success");
            }
@@ -374,46 +494,91 @@ function AgendamentoForm() {
            showIsland("Pagamento recusado.");
         }
       } catch (err) { 
-        showIsland("Erro de conexão com o servidor."); 
-        console.error(err);
+        showIsland("Erro de conexão.", "error"); 
       }
       resolve();
     });
   };
 
+  // ==========================================
+  // EFEITOS DE POLLING E COUNTDOWN DO PIX
+  // ==========================================
+  
+  // Efeito Visual: Timer do Countdown regressivo
+  useEffect(() => {
+    if (!pixData?.payment_id || timeLeft <= 0) return;
+    const timerInterval = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerInterval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timerInterval);
+  }, [pixData?.payment_id]);
+
+  // Função centralizada para verificar o pagamento
+  const verificarPagamentoPixAutomatico = async (paymentId) => {
+    if (checkingRef.current) return;
+    checkingRef.current = true;
+    
+    try {
+      const res = await fetch(`/api/verificar-pagamento?id=${paymentId}`);
+      const result = await res.json();
+
+      if (result.success && result.status === "approved") {
+        // Atualiza banco para Pago
+        const { data: paciente } = await supabase.from("pacientes").select("id").eq("cpf", formData.cpf).maybeSingle();
+        if (paciente) {
+          await supabase.from("agendamentos")
+            .update({ status_pagamento_antecipado: true })
+            .eq("paciente_id", paciente.id)
+            .eq("data_agendamento", formData.data_agendamento)
+            .eq("horario_agendamento", formData.horario_agendamento);
+        }
+
+        // Executa fluxos de aprovação
+        await programarMensagensMedicas(formData);
+        const nomePaciente = `${formData.nome} ${formData.sobrenome}`.trim();
+        const dataFormatada = formData.data_agendamento.split("-").reverse().join("/");
+
+        await dispararPushRmChat(
+          formData.telefone_whatsapp, 
+          nomePaciente, 
+          `✅ Pagamento recebido com sucesso, ${nomePaciente}!\n\nSua consulta está confirmada para o dia ${dataFormatada} às ${formData.horario_agendamento}.\n\nAguardamos você!`
+        );
+
+        setPixData(null); // Tira QR code da tela
+        setTimeLeft(0);
+        showIsland("Pagamento Confirmado!", "success");
+      }
+    } catch (e) {
+      console.error("Erro no polling background:", e);
+    } finally {
+      checkingRef.current = false;
+    }
+  };
+
+  // Efeito Lógico: Polling a cada 10 segundos
+  useEffect(() => {
+    if (!pixData?.payment_id) return;
+    
+    const pollInterval = setInterval(() => {
+      if (timeLeftRef.current > 0 && !checkingRef.current) {
+        verificarPagamentoPixAutomatico(pixData.payment_id);
+      }
+    }, 10000); // 10 Segundos cravados para economizar Supabase
+
+    return () => clearInterval(pollInterval);
+  }, [pixData?.payment_id]);
+
+
   // --- CLASSES CSS COMPARTILHADAS ---
   const cnInputWrap = "relative rounded-xl bg-zinc-50/50 dark:bg-[#111111]/50 border border-zinc-200 dark:border-zinc-800 transition-all duration-300 focus-within:border-zinc-900 dark:focus-within:border-white focus-within:ring-1 focus-within:ring-zinc-900 dark:focus-within:ring-white overflow-hidden";
   const cnInput = "w-full p-3.5 pt-6 bg-transparent outline-none text-zinc-900 dark:text-white font-medium text-[16px] peer placeholder-transparent";
   const cnLabel = "absolute left-3.5 top-2 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest transition-all duration-300 peer-placeholder-shown:top-4 peer-placeholder-shown:text-[14px] peer-placeholder-shown:font-normal peer-placeholder-shown:normal-case peer-placeholder-shown:tracking-normal peer-focus:top-2 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:text-zinc-900 dark:peer-focus:text-white pointer-events-none";
-
-  // ==========================================
-  // FUNÇÃO DE TESTE - APAGAR DEPOIS
-  // ==========================================
-  const simulatePayment = async (e) => {
-    e.preventDefault();
-    showIsland("Simulando pagamento...", "loading");
-    
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      const salvo = await salvarNoBanco(true);
-      if (!salvo) { 
-        showIsland("Erro ao salvar recibo."); 
-        return; 
-      }
-      
-      await dispararWebhook(true);
-
-      const telefonePaciente = formData.telefone_whatsapp;
-      const nomePaciente = `${formData.nome} ${formData.sobrenome}`.trim();
-      await dispararPushRmChat(telefonePaciente, nomePaciente);
-
-      showIsland("Pagamento Aprovado (TESTE)", "success"); 
-      setStep(6);
-    } catch (error) {
-      showIsland("Erro na simulação.");
-    }
-  };
 
   return (
     <>
@@ -438,7 +603,18 @@ function AgendamentoForm() {
             <div className="flex items-center justify-between px-6 md:px-10 py-5 border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-[#0A0A0A]/80 backdrop-blur-md">
               {step > 0 ? <button onClick={() => setStep(p => p - 1)} className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white text-[13px] font-medium"><ChevronLeft size={18} /> Voltar</button> : <div/>}
               {step !== 5 && !(step === 2 && flags.exibirConfUri && !flags.confirmouUri) && (
-                <button onClick={nextStep} disabled={loading || (step===1 && formData.cpf?.length !== 14)} className="bg-zinc-900 dark:bg-white text-white dark:text-black font-bold text-[12px] px-6 py-2.5 rounded-full flex items-center gap-2 uppercase disabled:opacity-40">{loading ? "Processando" : (step === 4 && (formData.modalidade === "Convênio" || formData.tipo_servico === "Retorno") ? "Finalizar" : "Continuar")}{!loading && <ArrowRight size={16}/>}</button>
+                <button 
+                  onClick={nextStep} 
+                  disabled={loading || (step===1 && formData.cpf?.length !== 14)} 
+                  className={`font-bold text-[12px] px-6 py-2.5 rounded-full flex items-center gap-2 uppercase transition-colors disabled:opacity-40 ${
+                    isStepValid() 
+                      ? "bg-green-600 hover:bg-green-700 text-white" 
+                      : "bg-zinc-900 dark:bg-white text-white dark:text-black"
+                  }`}
+                >
+                  {loading ? "Processando" : (step === 4 && (formData.modalidade === "Convênio" || formData.tipo_servico === "Retorno") ? "Finalizar" : "Continuar")}
+                  {!loading && <ArrowRight size={16}/>}
+                </button>
               )}
             </div>
           )}
@@ -571,7 +747,7 @@ function AgendamentoForm() {
                       </div>
                     </div>
                     
-                    <div className="w-full md:w-1/2">
+                    <div className="w-full md:w-1/2" ref={timeSlotsRef}>
                       {formData.data_agendamento ? (
                          <div>
                            <div className="flex justify-between border-b pb-4 mb-4"><h4 className="font-medium text-sm">Horários</h4>{agenda.buscando && <Activity size={16} className="text-zinc-400 animate-spin"/>}</div>
@@ -595,12 +771,6 @@ function AgendamentoForm() {
                     <div className="flex justify-between border-b pb-4 mb-4"><span className="text-zinc-500 text-sm">{formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional}</span><span className="text-sm">R$ {(valorEntrada*2).toFixed(2)}</span></div>
                     <div className="flex justify-between items-center mb-8"><span className="font-medium">Reserva (50%)</span><span className="font-medium text-xl">R$ {valorEntrada.toFixed(2)}</span></div>
                     {process.env.NEXT_PUBLIC_MP_PUBLIC_KEY ? <Payment initialization={{ amount: valorEntrada > 0 ? valorEntrada : 1 }} onSubmit={onSubmitMP} customization={{ paymentMethods: { ticket: "all", bankTransfer: "all", creditCard: "all", debitCard: "all", mercadoPago: "all" }}} /> : <div className="p-4 bg-red-50 text-red-600 rounded-xl text-center text-sm">Credenciais Ausentes.</div>}
-                    <button 
-                        onClick={simulatePayment}
-                        className="w-full mt-4 py-4 bg-indigo-600 text-white font-bold rounded-2xl uppercase tracking-widest text-[12px] hover:bg-indigo-700 transition-colors shadow-md flex items-center justify-center gap-2"
-                      >
-                        Simular Pagamento Aprovado
-                      </button>
                   </div>
                 </motion.div>
               )}
@@ -611,7 +781,6 @@ function AgendamentoForm() {
                     {pixData ? <CreditCard size={32} /> : <CheckCircle size={32} />}
                   </div>
                   
-                  {/* TEXTOS ADAPTADOS SE FOR PIX OU CARTÃO */}
                   <h2 className="text-3xl font-medium">{pixData ? "Finalize seu pagamento." : "Agendamento Confirmado."}</h2>
                   <p className="text-zinc-500 mt-3 text-sm">
                     {pixData 
@@ -619,28 +788,26 @@ function AgendamentoForm() {
                       : `Seu agendamento para o dia ${formData.data_agendamento?.split("-").reverse().join("/")} às ${formData.horario_agendamento}h foi registrado com sucesso.`}
                   </p>
 
-                  {/* SEÇÃO DO PIX CONDICIONAL */}
                   {pixData && (
                     <div className="mt-8 p-6 rounded-2xl border w-full text-center bg-zinc-50 dark:bg-[#111111]">
                       <h3 className="text-[11px] font-bold uppercase text-zinc-500 mb-4 tracking-widest">Escaneie o QR Code</h3>
-                      <img
-                        src={`data:image/jpeg;base64,${pixData.qr_code_base64}`}
-                        alt="QR Code Pix"
-                        className="w-48 h-48 mx-auto rounded-xl border p-2 bg-white"
-                      />
+                      <img src={`data:image/jpeg;base64,${pixData.qr_code_base64}`} alt="QR Code Pix" className="w-48 h-48 mx-auto rounded-xl border p-2 bg-white" />
                       <div className="mt-6">
                         <span className="text-[10px] font-bold text-zinc-400 uppercase block mb-2">Ou use o Copia e Cola</span>
-                        <div className="flex bg-white dark:bg-black border rounded-xl p-2 items-center">
+                        <div className="flex bg-white dark:bg-black border rounded-xl p-2 items-center mb-6">
                           <input readOnly value={pixData.qr_code} className="w-full text-xs bg-transparent outline-none text-zinc-500 px-2 truncate" />
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(pixData.qr_code);
-                              showIsland("Código copiado!", "success");
-                            }}
-                            className="bg-zinc-900 text-white dark:bg-white dark:text-black px-4 py-2 rounded-lg text-xs font-bold"
-                          >
-                            Copiar
-                          </button>
+                          <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); showIsland("Código copiado!", "success"); }} className="bg-zinc-900 text-white dark:bg-white dark:text-black px-4 py-2 rounded-lg text-xs font-bold">Copiar</button>
+                        </div>
+                        
+                        <div className="mt-4 flex flex-col items-center justify-center p-4 bg-white dark:bg-black rounded-xl border shadow-sm">
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                            {timeLeft > 0 && <RefreshCw size={12} className="animate-spin text-zinc-400" />}
+                            Verificação Automática
+                          </span>
+                          <div className="text-3xl font-mono font-medium tracking-wider text-zinc-900 dark:text-white">
+                            {String(Math.floor(timeLeft / 60)).padStart(2, '0')}:{String(timeLeft % 60).padStart(2, '0')}
+                          </div>
+                          {timeLeft === 0 && <span className="text-xs text-red-500 mt-3 font-medium">Tempo limite de verificação automática expirado.</span>}
                         </div>
                       </div>
                     </div>
@@ -650,17 +817,6 @@ function AgendamentoForm() {
                     <div className="flex justify-between mb-4"><span className="text-[10px] font-bold text-zinc-500 uppercase">Paciente</span><span className="text-sm font-medium">{formData.nome}</span></div>
                     <div className="flex justify-between border-t pt-4"><span className="text-[10px] font-bold text-zinc-500 uppercase">Status</span><span className="text-sm font-mono">{pixData ? "Aguardando Pagamento" : "Confirmado"}</span></div>
                   </div>
-
-                  <a
-                    href={pixData 
-                      ? `https://wa.me/5584999999999?text=Ol%C3%A1%2C+estou+aguardando+a+confirma%C3%A7%C3%A3o+do+pagamento+da+minha+vaga!`
-                      : `https://wa.me/5584999999999?text=Ol%C3%A1%2C+meu+agendamento+foi+confirmado!`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-6 flex items-center justify-center gap-2 bg-[#25D366] text-white py-4 px-6 rounded-2xl font-bold uppercase tracking-widest text-[12px] hover:bg-[#1ebe57] transition-colors w-full shadow-lg"
-                  >
-                    Voltar para o WhatsApp
-                  </a>
                 </motion.div>
               )}
             </AnimatePresence>
