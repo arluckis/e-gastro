@@ -25,14 +25,12 @@ if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_MP_PUBLIC_KEY) {
 
 const URL_WEBHOOK_PUSH = "https://acessoapi.rmchat.com.br/w/875a4a21-8b19-42f1-97d7-d420f72f4310";
 
-// --- FUNÇÃO CORRIGIDA PARA REMOVER O 9º DÍGITO ---
 const dispararPushRmChat = async (telefonePaciente, nomePaciente, textoPersonalizado) => {
   try {
     let num = telefonePaciente.replace(/\D/g, "");
     
-    // Se tiver 11 dígitos (DDD + 9 + 8 dígitos) e o terceiro dígito for 9
     if (num.length === 11 && num.charAt(2) === '9') {
-      num = num.substring(0, 2) + num.substring(3); // Pula o 9 e junta o DDD com o resto
+      num = num.substring(0, 2) + num.substring(3); 
     }
     
     const numeroLimpo = "55" + num;
@@ -118,6 +116,17 @@ const calcularDataLimite = (dataBase, dias, tipoContagem) => {
     }
   }
   return d;
+};
+
+// Mapeamento dos médicos vindos do RM Chat via URI
+const mapaMedicos = {
+  "1": { tipo: "Consulta", nome: "Dra. Simone" },
+  "2": { tipo: "Consulta", nome: "Dr. Brilhante" },
+  "3": { tipo: "Consulta", nome: "Dr. Tiago Lima" },
+  "4": { tipo: "Consulta", nome: "Dr. Hugo Dyevy" },
+  "5": { tipo: "Consulta", nome: "Dra. Candice" },
+  "6": { tipo: "Exame", nome: "Endoscopia Digestiva Alta" },
+  "7": { tipo: "Exame", nome: "Colonoscopia" }
 };
 
 const programarMensagensMedicas = async (formData) => {
@@ -226,8 +235,8 @@ function AgendamentoForm() {
   const [agenda, setAgenda] = useState({ ocupados: [], buscando: false });
   
   const [flags, setFlags] = useState({
-    cpfUrl: false, nomeUrl: false, sobrenomeUrl: false, telUrl: false,
-    unlockedCpf: false, unlockedNome: false, unlockedSobrenome: false, unlockedTel: false,
+    cpfUrl: false, nomeUrl: false, sobrenomeUrl: false, telUrl: false, emailUrl: false, nascUrl: false,
+    unlockedAll: false,
     exibirConfUri: false, confirmouUri: false
   });
 
@@ -273,7 +282,7 @@ function AgendamentoForm() {
 
   const isStepValid = () => {
     if (step === 0) return true;
-    if (step === 1) return formData.cpf?.length === 14 && formData.nome?.length > 1 && formData.sobrenome?.length > 1 && formData.telefone_whatsapp?.length >= 14 && helpers.isValidDate(formData.data_nascimento) && formData.email?.includes('@');
+    if (step === 1) return formData.cpf?.length === 14 && formData.nome?.length >= 2 && formData.sobrenome?.length >= 2 && formData.telefone_whatsapp?.length >= 14 && helpers.isValidDate(formData.data_nascimento) && formData.email?.includes('@');
     if (step === 2) {
       if (flags.exibirConfUri && !flags.confirmouUri) return false;
       if (!formData.tipo_servico) return false;
@@ -288,34 +297,81 @@ function AgendamentoForm() {
   };
 
   useEffect(() => {
-    const nomeUrl = searchParams.get("nome"), cpfUrl = searchParams.get("cpf"), medicoUrl = searchParams.get("medico"), wppUrl = searchParams.get("whatsapp");
-    if (nomeUrl && cpfUrl && !context.isSmartLink) {
-      const parts = nomeUrl.trim().split(" ");
-      setValue("nome", parts[0] || "");
-      setValue("sobrenome", parts.slice(1).join(" ") || "");
-      setValue("cpf", masks.cpf(cpfUrl));
-      if (wppUrl) setValue("telefone_whatsapp", masks.phone(wppUrl));
+    const nomeUrl = searchParams.get("nome");
+    const cpfUrl = searchParams.get("cpf");
+    const medicoUrl = searchParams.get("medico");
+    const wppUrl = searchParams.get("whatsapp");
+    const emailUrl = searchParams.get("email");
+    const nascUrl = searchParams.get("nascimento");
 
-      setFlags(f => ({ ...f, cpfUrl: true, nomeUrl: true, sobrenomeUrl: parts.length > 1, telUrl: !!wppUrl, exibirConfUri: !!medicoUrl }));
-      setContext(c => ({ ...c, isSmartLink: true, personalizedName: parts[0] || "" }));
+    if ((nomeUrl !== null || cpfUrl !== null || medicoUrl !== null || wppUrl !== null) && !context.isSmartLink) {
       
-      if (medicoUrl && servicosDB.length > 0) {
-        const srv = servicosDB.find(s => s.nome === medicoUrl);
-        if (srv) {
-          setValue("tipo_servico", srv.tipo);
-          setValue(srv.tipo === "Consulta" ? "medico_profissional" : "subtipo_exame", srv.nome);
-        } else {
-          setValue("medico_profissional", medicoUrl);
+      if (nomeUrl) {
+        const parts = nomeUrl.trim().split(" ");
+        setValue("nome", parts[0] || "");
+        setValue("sobrenome", parts.slice(1).join(" ") || "");
+      }
+      if (cpfUrl) setValue("cpf", masks.cpf(cpfUrl));
+      if (wppUrl) setValue("telefone_whatsapp", masks.phone(wppUrl));
+      if (emailUrl) setValue("email", emailUrl);
+      if (nascUrl) setValue("data_nascimento", masks.date(nascUrl));
+
+      const hasCpf = !!(cpfUrl && cpfUrl.trim() !== "");
+      const hasNome = !!(nomeUrl && nomeUrl.trim() !== "");
+      const hasTel = !!(wppUrl && wppUrl.trim() !== "");
+      const hasEmail = !!(emailUrl && emailUrl.trim() !== "");
+      const hasNasc = !!(nascUrl && nascUrl.trim() !== "");
+      const hasMedico = !!(medicoUrl && medicoUrl.trim() !== "");
+
+      setFlags(f => ({ 
+        ...f, 
+        cpfUrl: hasCpf, 
+        nomeUrl: hasNome, 
+        sobrenomeUrl: hasNome && nomeUrl.trim().split(" ").length > 1, 
+        telUrl: hasTel,
+        emailUrl: hasEmail,
+        nascUrl: hasNasc,
+        exibirConfUri: hasMedico
+      }));
+      
+      setContext(c => ({ 
+        ...c, 
+        isSmartLink: true, 
+        personalizedName: nomeUrl ? nomeUrl.trim().split(" ")[0] : "" 
+      }));
+      
+      if (hasMedico) {
+        const mapped = mapaMedicos[medicoUrl];
+        if (mapped) {
+          setValue("tipo_servico", mapped.tipo);
+          setValue(mapped.tipo === "Consulta" ? "medico_profissional" : "subtipo_exame", mapped.nome);
+        } else if (servicosDB.length > 0) {
+          const srv = servicosDB.find(s => s.nome.toLowerCase().includes(medicoUrl.toLowerCase()));
+          if (srv) {
+            setValue("tipo_servico", srv.tipo);
+            setValue(srv.tipo === "Consulta" ? "medico_profissional" : "subtipo_exame", srv.nome);
+          } else {
+            setValue("medico_profissional", medicoUrl);
+          }
         }
       }
-      setStep(0);
+
+      const cpfValid = cpfUrl && cpfUrl.replace(/\D/g, "").length === 11;
+      const telValid = wppUrl && wppUrl.replace(/\D/g, "").length >= 10;
+      const nomeValid = nomeUrl && nomeUrl.trim().split(" ").length > 1;
+
+      if (cpfValid && telValid && nomeValid && hasEmail && hasNasc) {
+        setStep(2); 
+      } else {
+        setStep(1); 
+      }
     }
-  }, [searchParams, setValue, context.isSmartLink, servicosDB]);
+  }, [searchParams, context.isSmartLink, servicosDB, setValue]);
 
   const handleCpfLookup = async () => {
     if (formData.cpf?.length !== 14) return;
     setContext(c => ({ ...c, checkingUser: true }));
-    if (!context.isSmartLink || flags.unlockedCpf) ["nome", "sobrenome", "telefone_whatsapp", "email", "data_nascimento"].forEach(f => setValue(f, ""));
+    if (!context.isSmartLink || flags.unlockedAll) ["nome", "sobrenome", "telefone_whatsapp", "email", "data_nascimento"].forEach(f => setValue(f, ""));
 
     try {
       const { data } = await supabase.from("pacientes").select("*").eq("cpf", formData.cpf).maybeSingle();
@@ -397,7 +453,20 @@ function AgendamentoForm() {
     setLoading(true); showIsland("Processando...", "loading");
     try {
       if (step === 0) return setStep(1);
-      if (step === 1 && !(await trigger(["cpf", "nome", "sobrenome", "telefone_whatsapp", "data_nascimento", "email"]))) return showIsland("Verifique os dados informados.");
+      
+      if (step === 1) {
+        const isStep1Valid = await trigger(["cpf", "nome", "sobrenome", "telefone_whatsapp", "data_nascimento", "email"]);
+        if (!isStep1Valid) {
+          if (!formData.cpf || formData.cpf.length !== 14) return showIsland("CPF incompleto (14 dígitos).");
+          if (!formData.nome || formData.nome.length < 2) return showIsland("Informe o primeiro nome.");
+          if (!formData.sobrenome || formData.sobrenome.length < 2) return showIsland("Informe o sobrenome completo.");
+          if (!formData.telefone_whatsapp || formData.telefone_whatsapp.length < 14) return showIsland("WhatsApp incompleto.");
+          if (!formData.data_nascimento || !helpers.isValidDate(formData.data_nascimento)) return showIsland("Data de nascimento inválida.");
+          if (!formData.email || !formData.email.includes('@')) return showIsland("E-mail inválido.");
+          
+          return showIsland("Verifique os dados informados.");
+        }
+      }
       
       if (step === 2) {
         if (flags.exibirConfUri && flags.confirmouUri) {
@@ -444,7 +513,6 @@ function AgendamentoForm() {
             await dispararWebhook(false); 
             await programarMensagensMedicas(formData); 
             
-            // Disparo de push logo após finalizar o agendamento Convênio/Retorno
             const nomePaciente = `${formData.nome} ${formData.sobrenome}`.trim();
             const profName = formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional;
             const dataFormatada = formData.data_agendamento.split("-").reverse().join("/");
@@ -600,6 +668,39 @@ function AgendamentoForm() {
   const cnInput = "w-full p-3.5 pt-6 bg-transparent outline-none text-zinc-900 dark:text-white font-medium text-[16px] peer placeholder-transparent";
   const cnLabel = "absolute left-3.5 top-2 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest transition-all duration-300 peer-placeholder-shown:top-4 peer-placeholder-shown:text-[14px] peer-placeholder-shown:font-normal peer-placeholder-shown:normal-case peer-placeholder-shown:tracking-normal peer-focus:top-2 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:text-zinc-900 dark:peer-focus:text-white pointer-events-none";
 
+  const renderLockedOrInput = (formKey, label, value, isLocked, maskFn, placeholder, maxLength, type = "text") => {
+    if (isLocked && value) {
+       return (
+          <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-800 py-3 last:border-0">
+             <div>
+                <span className="text-[10px] font-bold text-zinc-400 uppercase block tracking-wider">{label}</span>
+                <span className="text-[15px] font-medium text-zinc-900 dark:text-white mt-0.5 block">{value}</span>
+             </div>
+             <button onClick={() => setFlags(f => ({...f, unlockedAll: true}))} className="p-2.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-full flex items-center justify-center">
+               <Pencil size={14}/>
+             </button>
+          </div>
+       );
+    }
+    
+    return (
+       <div className={`${cnInputWrap} my-3 last:mb-0`}>
+          <input 
+            type={type} 
+            {...register(formKey)} 
+            onChange={e => {
+              const val = maskFn ? maskFn(e.target.value) : e.target.value;
+              setValue(formKey, val);
+            }} 
+            maxLength={maxLength} 
+            placeholder={placeholder} 
+            className={cnInput} 
+          />
+          <label className={cnLabel}>{label}</label>
+       </div>
+    );
+  };
+
   return (
     <>
       <div className="absolute inset-0 bg-[#FAFAFA] dark:bg-black -z-20 pointer-events-none" />
@@ -654,30 +755,48 @@ function AgendamentoForm() {
                 <motion.div key="s1" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-lg mx-auto space-y-6">
                   <div><h2 className="text-3xl font-medium">Dados de Acesso</h2><p className="text-zinc-500 text-sm mt-2">Verifique ou insira as informações.</p></div>
                   
-                  {context.isSmartLink && !flags.unlockedCpf && !flags.unlockedNome && !flags.unlockedSobrenome && !flags.unlockedTel ? (
-                    <div className="p-6 bg-zinc-50 dark:bg-[#111111] border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                  {context.isSmartLink && !flags.unlockedAll ? (
+                    <div className="p-7 bg-zinc-50/50 dark:bg-[#111111]/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm">
                       <div className="flex justify-between items-start mb-6">
-                        <h3 className="text-lg font-medium">Agendamento E-gastro<br/><span className="text-zinc-500 text-base">{formData.nome} {formData.sobrenome}</span></h3>
-                        <button onClick={() => setFlags(f => ({ ...f, unlockedCpf:true, unlockedNome:true, unlockedSobrenome:true, unlockedTel:true }))} className="text-[11px] font-bold uppercase text-zinc-500 flex gap-1"><Pencil size={12}/> Editar</button>
+                        <h3 className="text-lg font-medium">Dados do Paciente</h3>
+                        <button onClick={() => setFlags(f => ({ ...f, unlockedAll: true }))} className="text-[11px] font-bold uppercase text-zinc-500 hover:text-zinc-900 dark:hover:text-white flex gap-1.5 items-center transition-colors">
+                          <Pencil size={12}/> Editar Tudo
+                        </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm border-t border-zinc-200 dark:border-zinc-800 pt-4 mb-6">
-                        <div><span className="text-[10px] font-bold text-zinc-400 uppercase">CPF</span><span className="block">{formData.cpf}</span></div>
-                        <div><span className="text-[10px] font-bold text-zinc-400 uppercase">Telefone</span><span className="block">{formData.telefone_whatsapp || "—"}</span></div>
-                      </div>
-                      <div className="grid gap-4 border-t border-zinc-200 dark:border-zinc-800 pt-6">
-                        <div className={cnInputWrap}><input {...register("data_nascimento")} onChange={e => setValue("data_nascimento", masks.date(e.target.value))} placeholder="DD/MM/AAAA" maxLength={10} className={cnInput} /><label className={cnLabel}>Data de Nascimento</label></div>
-                        <div className={cnInputWrap}><input type="email" {...register("email")} className={cnInput} placeholder="seu@email.com" /><label className={cnLabel}>E-mail de Contato</label></div>
+                      
+                      <div className="flex flex-col">
+                        {renderLockedOrInput("cpf", "CPF do Paciente", formData.cpf, flags.cpfUrl, masks.cpf, "000.000.000-00", 14)}
+                        
+                        {flags.nomeUrl && flags.sobrenomeUrl && formData.nome && formData.sobrenome ? (
+                           <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-800 py-3">
+                              <div>
+                                 <span className="text-[10px] font-bold text-zinc-400 uppercase block tracking-wider">Nome Completo</span>
+                                 <span className="text-[15px] font-medium text-zinc-900 dark:text-white mt-0.5 block">{formData.nome} {formData.sobrenome}</span>
+                              </div>
+                              <button onClick={() => setFlags(f => ({...f, unlockedAll: true}))} className="p-2.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-full flex items-center justify-center">
+                                <Pencil size={14}/>
+                              </button>
+                           </div>
+                        ) : (
+                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
+                              <div className={cnInputWrap}><input {...register("nome")} className={cnInput} placeholder="Nome" /><label className={cnLabel}>Primeiro Nome</label></div>
+                              <div className={cnInputWrap}><input {...register("sobrenome")} className={cnInput} placeholder="Sobrenome" /><label className={cnLabel}>Sobrenome Completo</label></div>
+                           </div>
+                        )}
+
+                        {renderLockedOrInput("telefone_whatsapp", "WhatsApp", formData.telefone_whatsapp, flags.telUrl, masks.phone, "(00) 90000-0000", 15)}
+                        {renderLockedOrInput("data_nascimento", "Data de Nascimento", formData.data_nascimento, flags.nascUrl, masks.date, "DD/MM/AAAA", 10)}
+                        {renderLockedOrInput("email", "E-mail de Contato", formData.email, flags.emailUrl, null, "seu@email.com", undefined, "email")}
                       </div>
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className={flags.cpfUrl && !flags.unlockedCpf ? "p-4 bg-zinc-50 dark:bg-[#111111] border rounded-xl flex justify-between items-center" : cnInputWrap}>
-                        {flags.cpfUrl && !flags.unlockedCpf ? (
-                          <><div className="flex flex-col"><span className="text-[10px] font-bold text-zinc-500 uppercase">CPF Vinculado</span><span className="font-mono text-sm">{formData.cpf}</span></div><button onClick={() => setFlags(f => ({...f, unlockedCpf: true}))}><Pencil size={14} className="text-zinc-400"/></button></>
-                        ) : (
-                          <><input {...register("cpf")} onChange={e => setValue("cpf", masks.cpf(e.target.value))} maxLength={14} placeholder="000.000.000-00" className={`${cnInput} font-mono`} /><label className={cnLabel}>CPF do Paciente</label>
-                          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">{context.checkingUser ? <Activity size={16} className="text-zinc-400 animate-spin"/> : formData.cpf?.length === 14 ? <CheckCircle size={16} className="text-zinc-900 dark:text-white"/> : <Search size={16} className="text-zinc-300 dark:text-zinc-700"/>}</div></>
-                        )}
+                      <div className={cnInputWrap}>
+                        <input {...register("cpf")} onChange={e => setValue("cpf", masks.cpf(e.target.value))} maxLength={14} placeholder="000.000.000-00" className={`${cnInput} font-mono`} />
+                        <label className={cnLabel}>CPF do Paciente</label>
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                          {context.checkingUser ? <Activity size={16} className="text-zinc-400 animate-spin"/> : formData.cpf?.length === 14 ? <CheckCircle size={16} className="text-zinc-900 dark:text-white"/> : <Search size={16} className="text-zinc-300 dark:text-zinc-700"/>}
+                        </div>
                       </div>
                       
                       {formData.cpf?.length === 14 && !context.checkingUser && (
@@ -704,12 +823,22 @@ function AgendamentoForm() {
                   
                   {flags.exibirConfUri && !flags.confirmouUri ? (
                     <div className="text-center max-w-md mx-auto py-6">
-                      <h3 className="text-lg font-medium">Confirmar Especialista?</h3>
-                      <div className="my-6 inline-block bg-zinc-50 dark:bg-[#111111] border px-6 py-4 rounded-2xl">
-                        <span className="block font-medium">{formData.medico_profissional || formData.subtipo_exame}</span>
-                        <span className="block text-[10px] font-bold text-zinc-400 uppercase mt-1">{formData.tipo_servico}</span>
+                      <h3 className="text-2xl font-medium">Verificação de Agendamento</h3>
+                      <p className="text-zinc-500 text-sm mt-2">Você selecionou através do WhatsApp:</p>
+                      
+                      <div className="my-6 inline-block bg-zinc-50 dark:bg-[#111111] border border-zinc-200 dark:border-zinc-800 px-8 py-5 rounded-2xl w-full shadow-sm">
+                        <span className="block font-semibold text-lg text-zinc-900 dark:text-white">{formData.medico_profissional || formData.subtipo_exame}</span>
+                        <span className="block text-[11px] font-bold text-zinc-400 uppercase mt-2 tracking-widest">{formData.tipo_servico}</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-4"><button onClick={() => { setFlags(f => ({...f, exibirConfUri: false})); setValue("medico_profissional", ""); setValue("subtipo_exame", "");}} className="py-3 border rounded-xl font-medium text-sm">Alterar</button><button onClick={() => { setFlags(f => ({...f, confirmouUri: true})); setStep(perguntasAtuais.length > 0 ? 3 : 4); }} className="py-3 bg-zinc-900 text-white dark:bg-white dark:text-black rounded-xl font-medium text-sm">Confirmar</button></div>
+
+                      <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                        <button onClick={() => { setFlags(f => ({...f, confirmouUri: true})); setStep(perguntasAtuais.length > 0 ? 3 : 4); }} className="w-full sm:w-1/2 py-3.5 bg-zinc-900 text-white dark:bg-white dark:text-black rounded-xl font-bold text-sm shadow-md transition-transform hover:scale-[1.02]">
+                          Continuar
+                        </button>
+                        <button onClick={() => { setFlags(f => ({...f, exibirConfUri: false})); setValue("medico_profissional", ""); setValue("subtipo_exame", "");}} className="w-full sm:w-1/2 py-3.5 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-[#111111] rounded-xl font-medium text-sm transition-colors text-zinc-900 dark:text-white">
+                          Selecionar outro profissional
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex flex-col md:flex-row gap-6 w-full">
@@ -796,8 +925,6 @@ function AgendamentoForm() {
                           const d = i + 1, y = calendarMonth.getFullYear(), m = calendarMonth.getMonth();
                           const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                           
-                          // Regra deduzida da clínica para evitar agendamento amanhã para exames. 
-                          // Bloqueio garantido de pelo menos 1 dia independente do DB, se for Exame.
                           const minDiasBloqueio = formData.tipo_servico === "Exame" ? 1 : 0;
                           const diasBloqueioPadrao = Math.max(selectedSrv?.dias_bloqueio_padrao || 0, minDiasBloqueio);
 
@@ -886,7 +1013,6 @@ function AgendamentoForm() {
                     <div className="flex justify-between border-t pt-4"><span className="text-[10px] font-bold text-zinc-500 uppercase">Status</span><span className="text-sm font-mono">{pixData ? "Aguardando Pagamento" : "Confirmado"}</span></div>
                   </div>
 
-                  {/* Renderização condicional dos botões solicitados: Só exibem depois do processo de pagamento concluído OU para convênios */}
                   {!pixData && (
                     <div className="mt-6 flex flex-col gap-3 w-full">
                       <button onClick={() => window.open(`https://wa.me/5583999999999`, "_blank")} className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
