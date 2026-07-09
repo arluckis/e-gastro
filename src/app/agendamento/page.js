@@ -25,9 +25,18 @@ if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_MP_PUBLIC_KEY) {
 
 const URL_WEBHOOK_PUSH = "https://acessoapi.rmchat.com.br/w/875a4a21-8b19-42f1-97d7-d420f72f4310";
 
+// --- FUNÇÃO CORRIGIDA PARA REMOVER O 9º DÍGITO ---
 const dispararPushRmChat = async (telefonePaciente, nomePaciente, textoPersonalizado) => {
   try {
-    const numeroLimpo = "55" + telefonePaciente.replace(/\D/g, "");
+    let num = telefonePaciente.replace(/\D/g, "");
+    
+    // Se tiver 11 dígitos (DDD + 9 + 8 dígitos) e o terceiro dígito for 9
+    if (num.length === 11 && num.charAt(2) === '9') {
+      num = num.substring(0, 2) + num.substring(3); // Pula o 9 e junta o DDD com o resto
+    }
+    
+    const numeroLimpo = "55" + num;
+    
     const payload = { name: nomePaciente, number: numeroLimpo, texto: textoPersonalizado };
     await axios.post(URL_WEBHOOK_PUSH, payload, { headers: { 'Content-Type': 'application/json' } });
   } catch (error) {
@@ -90,14 +99,13 @@ const gerarData = (dataBase, horarioBase, diasSubtrair, horaEspecifica) => {
   return d.toISOString();
 };
 
-// CÁLCULO INTELIGENTE DE DATAS (CORRIDOS VS ÚTEIS)
 const calcularDataLimite = (dataBase, dias, tipoContagem) => {
   let d = new Date(dataBase);
   let diasAdicionados = 0;
   while (diasAdicionados < dias) {
     d.setDate(d.getDate() + 1);
     if (tipoContagem === "uteis") {
-      if (d.getDay() !== 0 && d.getDay() !== 6) diasAdicionados++; // Pula Sáb/Dom
+      if (d.getDay() !== 0 && d.getDay() !== 6) diasAdicionados++; 
     } else {
       diasAdicionados++;
     }
@@ -208,7 +216,6 @@ function AgendamentoForm() {
   const timeoutRef = useRef(null);
   const timeSlotsRef = useRef(null); 
   
-  // DADOS DO BANCO
   const [servicosDB, setServicosDB] = useState([]);
   const [perguntasDB, setPerguntasDB] = useState([]);
   const [respostasTriagem, setRespostasTriagem] = useState({});
@@ -254,7 +261,6 @@ function AgendamentoForm() {
     fetchBaseData();
   }, []);
 
-  // CALCULO DO PREÇO DINAMICO
   const getSelectedService = () => {
     if (!formData.tipo_servico) return null;
     const nomeBusca = formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional;
@@ -424,7 +430,6 @@ function AgendamentoForm() {
       }
 
       if (step === 3) {
-        // Encontra o maior bloqueio entre as respostas da triagem
         let maiorBloqueioTriagem = null;
         Object.values(respostasTriagem).forEach(opt => {
           if (opt && opt.regra_bloqueio_dias > 0) {
@@ -463,7 +468,7 @@ function AgendamentoForm() {
         const mpPayer = param.formData?.payer || {};
         const payload = {
           ...param.formData,
-          amount: Number(valorEntrada.toFixed(2)), // BUG CORRIGIDO (Permite centavos)
+          amount: Number(valorEntrada.toFixed(2)), 
           description: `Entrada - ${formData.medico_profissional || formData.subtipo_exame}`,
           payer: {
             ...mpPayer,
@@ -506,7 +511,6 @@ function AgendamentoForm() {
                const hora_limite = `${String(limitDate.getHours()).padStart(2, '0')}:${String(limitDate.getMinutes()).padStart(2, '0')}`;
                const valorFormatado = valorEntrada.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                
-               // MENSAGEM DO PIX AGORA INFORMA O VALOR
                await dispararPushRmChat(
                  telefonePaciente, 
                  nomePaciente, 
@@ -788,7 +792,6 @@ function AgendamentoForm() {
                           const d = i + 1, y = calendarMonth.getFullYear(), m = calendarMonth.getMonth();
                           const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                           
-                          // LÓGICA DE BLOQUEIO DINÂMICO APRIMORADA
                           const dataSrv = calcularDataLimite(new Date(), selectedSrv?.dias_bloqueio_padrao || 0, selectedSrv?.tipo_contagem_dias || "corridos");
                           const limiteFinalData = (!bloqueioExtraCalculado || dataSrv > bloqueioExtraCalculado) ? dataSrv : bloqueioExtraCalculado;
                           

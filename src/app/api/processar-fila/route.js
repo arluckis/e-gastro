@@ -1,4 +1,3 @@
-// app/api/processar-fila/route.js
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import axios from 'axios';
@@ -22,7 +21,12 @@ export async function GET(request) {
     }
 
     for (const msg of mensagens) {
-      const numeroLimpo = "55" + msg.telefone_whatsapp.replace(/\D/g, "");
+      // Formata o número removendo traços e o 9º dígito se for celular do Brasil
+      let num = msg.telefone_whatsapp.replace(/\D/g, "");
+      if (num.length === 11 && num.charAt(2) === '9') {
+        num = num.substring(0, 2) + num.substring(3);
+      }
+      const numeroLimpo = "55" + num;
       
       try {
         await axios.post(URL_RMCHAT, { 
