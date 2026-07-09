@@ -12,15 +12,13 @@ import axios from "axios";
 import { 
   ArrowRight, CheckCircle, AlertTriangle, Activity, User, 
   HeartPulse, Search, Pencil, ChevronLeft, ChevronRight, 
-  ShieldCheck, CreditCard, Calendar as CalendarIcon, RefreshCw
+  ShieldCheck, CreditCard, Calendar as CalendarIcon, RefreshCw,
+  HelpCircle
 } from "lucide-react";
 
 import Navbar from "@/components/Navbar";
 import SidebarPremium from "@/components/SidebarPremium";
 
-// ==========================================
-// 1. CONFIGURAÇÕES GERAIS E INTEGRAÇÕES
-// ==========================================
 if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_MP_PUBLIC_KEY) {
   initMercadoPago(process.env.NEXT_PUBLIC_MP_PUBLIC_KEY, { locale: 'pt-BR' });
 }
@@ -30,39 +28,16 @@ const URL_WEBHOOK_PUSH = "https://acessoapi.rmchat.com.br/w/875a4a21-8b19-42f1-9
 const dispararPushRmChat = async (telefonePaciente, nomePaciente, textoPersonalizado) => {
   try {
     const numeroLimpo = "55" + telefonePaciente.replace(/\D/g, "");
-    const payload = {
-      name: nomePaciente,
-      number: numeroLimpo,
-      texto: textoPersonalizado 
-    };
+    const payload = { name: nomePaciente, number: numeroLimpo, texto: textoPersonalizado };
     await axios.post(URL_WEBHOOK_PUSH, payload, { headers: { 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error("❌ Falha RM Chat:", error);
   }
 };
 
-const MAPA_SERVICOS = {
-  "1": { tipo: "Consulta", medico: "Dra. Simone" },
-  "2": { tipo: "Consulta", medico: "Dr. Brilhante" },
-  "3": { tipo: "Consulta", medico: "Dr. Tiago Lima" },
-  "4": { tipo: "Consulta", medico: "Dr. Thiago Dyavy" },
-  "5": { tipo: "Consulta", medico: "Dra. Candice (Psicologia)" },
-  "6": { tipo: "Exame", exame: "Endoscopia Digestiva Alta" },
-  "7": { tipo: "Exame", exame: "Colonoscopia" }
-};
-
-const PRECOS = { 
-  "Dra. Simone": 450, "Dr. Brilhante": 2, "Dr. Tiago Lima": 350, 
-  "Dr. Thiago Dyavy": 350, "Dra. Candice (Psicologia)": 200,
-  "Endoscopia Digestiva Alta": 500, "Colonoscopia": 750, "Retirada de Balão Gástrico": 1100
-};
-
 const HORARIOS_BASE = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
-const NOME_ETAPAS = ["Sincronização", "Identificação", "Especialidade", "Modalidade", "Agenda", "Checkout", "Concluído"];
+const NOME_ETAPAS = ["Sincronização", "Identificação", "Especialidade", "Triagem", "Modalidade", "Agenda", "Checkout", "Concluído"];
 
-// ==========================================
-// 2. MÁSCARAS E VALIDAÇÕES
-// ==========================================
 const masks = {
   cpf: (v) => v.replace(/\D/g, "").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})/, "$1-$2").replace(/(-\d{2})\d+?$/, "$1"),
   phone: (v) => v.replace(/\D/g, "").replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2").replace(/(-\d{4})\d+?$/, "$1"),
@@ -101,9 +76,6 @@ const schema = z.object({
   horario_agendamento: z.string().optional(),
 });
 
-// ==========================================
-// LÓGICA DE AGENDAMENTO (SUPABASE FILA)
-// ==========================================
 const gerarData = (dataBase, horarioBase, diasSubtrair, horaEspecifica) => {
   const d = new Date(`${dataBase}T12:00:00-03:00`); 
   d.setDate(d.getDate() - diasSubtrair);
@@ -114,25 +86,42 @@ const gerarData = (dataBase, horarioBase, diasSubtrair, horaEspecifica) => {
     const [h, m] = horarioBase.split(':');
     d.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
   }
+  if (d.getTime() < Date.now()) return new Date(Date.now() + 60000).toISOString(); 
   return d.toISOString();
 };
 
+// CÁLCULO INTELIGENTE DE DATAS (CORRIDOS VS ÚTEIS)
+const calcularDataLimite = (dataBase, dias, tipoContagem) => {
+  let d = new Date(dataBase);
+  let diasAdicionados = 0;
+  while (diasAdicionados < dias) {
+    d.setDate(d.getDate() + 1);
+    if (tipoContagem === "uteis") {
+      if (d.getDay() !== 0 && d.getDay() !== 6) diasAdicionados++; // Pula Sáb/Dom
+    } else {
+      diasAdicionados++;
+    }
+  }
+  return d;
+};
+
 const programarMensagensMedicas = async (formData) => {
-  const { nome, telefone_whatsapp, data_agendamento, horario_agendamento, tipo_servico, subtipo_exame, data_nascimento } = formData;
+  const { nome, telefone_whatsapp, data_agendamento, horario_agendamento, tipo_servico, subtipo_exame, data_nascimento, medico_profissional } = formData;
   let mensagens = [];
   const dataFormatada = data_agendamento.split("-").reverse().join("/");
+  const profName = tipo_servico === "Exame" ? subtipo_exame : medico_profissional;
 
   mensagens.push({
     telefone_whatsapp, nome_paciente: nome,
     data_hora_programada: gerarData(data_agendamento, horario_agendamento, 0, `${(parseInt(horario_agendamento.split(':')[0]) + 2).toString().padStart(2, '0')}:00`),
-    mensagem: `Olá, ${nome}! Agradecemos muito por escolher nossa clínica para o seu atendimento.\n\nSua opinião é fundamental para nós! Poderia tirar 1 minutinho para avaliar nosso atendimento?\n\nAcesse o link: https://share.google/uFFEOKCkCvbxZMRKU`
+    mensagem: `Olá, ${nome}! Agradecemos muito por escolher nossa clínica para o seu atendimento de ${profName}.\n\nSua opinião é fundamental para nós! Poderia tirar 1 minutinho para avaliar nosso atendimento?\n\nAcesse o link: https://share.google/uFFEOKCkCvbxZMRKU`
   });
 
   if (tipo_servico === "Consulta" || tipo_servico === "Retorno") {
     mensagens.push({
       telefone_whatsapp, nome_paciente: nome,
       data_hora_programada: gerarData(data_agendamento, null, 1, "08:00"),
-      mensagem: `Olá, ${nome}! Passando para lembrar da sua consulta agendada para amanhã, dia ${dataFormatada} às ${horario_agendamento}. Por favor, responda esta mensagem para confirmar sua presença.`
+      mensagem: `Olá, ${nome}! Passando para lembrar da sua consulta agendada com ${profName} para amanhã, dia ${dataFormatada} às ${horario_agendamento}. Por favor, responda esta mensagem para confirmar sua presença.`
     });
   }
 
@@ -140,14 +129,14 @@ const programarMensagensMedicas = async (formData) => {
     mensagens.push({
       telefone_whatsapp, nome_paciente: nome,
       data_hora_programada: gerarData(data_agendamento, null, 2, "08:00"),
-      mensagem: `Olá, ${nome}! Seu exame se aproxima. Ele está agendado para o dia ${dataFormatada}.\n\nCaso tenha alguma dúvida sobre o preparo que enviamos anteriormente, nos chame aqui!`
+      mensagem: `Olá, ${nome}! Seu exame de ${profName} se aproxima. Ele está agendado para o dia ${dataFormatada}.\n\nCaso tenha alguma dúvida sobre o preparo que enviamos anteriormente, nos chame aqui!`
     });
 
     if (helpers.calcAge(data_nascimento) >= 65) {
       mensagens.push({
         telefone_whatsapp, nome_paciente: nome,
         data_hora_programada: new Date(Date.now() + 60000).toISOString(), 
-        mensagem: `Olá, ${nome}! Notamos em seu cadastro que você possui 65 anos ou mais. ⚠️ Gostaríamos de lembrar que, pela sua segurança, é obrigatório passar por uma consulta prévia com um cardiologista ou anestesista antes de realizar este exame. Por favor, envie a liberação médica por aqui.`
+        mensagem: `Olá, ${nome}! Notamos em seu cadastro que você possui 65 anos ou mais. ⚠️ Lembramos que, pela sua segurança, é obrigatório passar por uma consulta prévia com um cardiologista ou anestesista antes de realizar este exame. Por favor, envie a liberação médica por aqui.`
       });
     }
 
@@ -177,14 +166,14 @@ const programarMensagensMedicas = async (formData) => {
     if (subtipo_exame === "Colonoscopia") {
       mensagens.push({
         telefone_whatsapp, nome_paciente: nome, data_hora_programada: new Date(Date.now() + 120000).toISOString(),
-        mensagem: `Olá, ${nome}! Segue o guia de preparo OBRIGATÓRIO para sua Colonoscopia:\n\n⏳ *3 DIAS ANTES:*\nSuspenda sementes, amendoim, nozes, castanhas e cereais integrais (linhaça, aveia, etc).\n\n⏳ *1 DIA ANTES (VÉSPERA):*\n- Dieta leve permitida APENAS até o almoço;\n- Após o almoço: PROIBIDO alimentos sólidos. Apenas líquidos claros (água, água de coco, Gatorade de laranja/limão);\n- Às 11:00h: Tomar 3 comprimidos de Dulcolax ou Bisacodil (Idosos: 2; Em caso de diarreia: 1);\n- Às 18:00h: Tomar 2 sachês de Picoprep + Simeticona dissolvidos.\n\n⏳ *DIA DO EXAME (6 a 8 horas antes):*\n- Tomar mais 2 sachês de Picoprep + Simeticona;\n- Jejum completo para alimentos sólidos.\n- Líquidos claros permitidos apenas até 3 horas antes do exame.`
+        mensagem: `Olá, ${nome}! Segue o guia de preparo OBRIGATÓRIO para sua Colonoscopia:\n\n⏳ *3 DIAS ANTES:*\nSuspenda sementes, amendoim, nozes, castanhas e cereais integrais.\n\n⏳ *1 DIA ANTES (VÉSPERA):*\n- Dieta leve permitida APENAS até o almoço;\n- Após o almoço: PROIBIDO alimentos sólidos. Apenas líquidos claros;\n- Às 11:00h: Tomar 3 comprimidos de Dulcolax ou Bisacodil (Idosos: 2; Em caso de diarreia: 1);\n- Às 18:00h: Tomar 2 sachês de Picoprep + Simeticona dissolvidos.\n\n⏳ *DIA DO EXAME (6 a 8 horas antes):*\n- Tomar mais 2 sachês de Picoprep + Simeticona;\n- Jejum completo para alimentos sólidos.\n- Líquidos claros permitidos apenas até 3 horas antes do exame.`
       });
     }
 
     if (subtipo_exame === "Retirada de Balão Gástrico") {
       mensagens.push({
         telefone_whatsapp, nome_paciente: nome, data_hora_programada: new Date(Date.now() + 120000).toISOString(),
-        mensagem: `Olá, ${nome}! Segue o protocolo para a retirada do seu Balão Gástrico:\n\n📅 *1 SEMANA ANTES:* Tomar 1 cápsula de Fluconazol 150mg.\n📅 *3 DIAS ANTES:* Iniciar dieta ESTRITA apenas com líquidos restritos (sem leite, sem gelatina, apenas caldo coado). Tomar 1 litro de Coca-Cola Zero por dia. 🚫 Proibido proteínas ou suplementos.\n📅 *VÉSPERA:* Tomar Digesan (cápsula ou 35 gotas) 3 vezes ao dia.\n📅 *DIA DO PROCEDIMENTO:* Jejum de alimentos de 12 horas (água liberada até 3 horas antes). Medicações de pressão, diabetes e tireoide podem ser tomadas normalmente. Comparecimento OBRIGATÓRIO com um responsável.`
+        mensagem: `Olá, ${nome}! Segue o protocolo para a retirada do seu Balão Gástrico:\n\n📅 *1 SEMANA ANTES:* Tomar 1 cápsula de Fluconazol 150mg.\n📅 *3 DIAS ANTES:* Iniciar dieta ESTRITA apenas com líquidos restritos. Tomar 1 litro de Coca-Cola Zero por dia. 🚫 Proibido proteínas ou suplementos.\n📅 *VÉSPERA:* Tomar Digesan (cápsula ou 35 gotas) 3 vezes ao dia.\n📅 *DIA DO PROCEDIMENTO:* Jejum de alimentos de 12 horas (água liberada até 3 horas antes). Comparecimento OBRIGATÓRIO com um responsável.`
       });
     }
   }
@@ -194,9 +183,6 @@ const programarMensagensMedicas = async (formData) => {
   }
 };
 
-// ==========================================
-// 3. COMPONENTE PRINCIPAL (PAGE)
-// ==========================================
 export default function AgendamentoPremium() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
 
@@ -213,9 +199,6 @@ export default function AgendamentoPremium() {
   );
 }
 
-// ==========================================
-// 4. COMPONENTE DE FORMULÁRIO (LÓGICA E UI)
-// ==========================================
 function AgendamentoForm() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState(0); 
@@ -225,6 +208,12 @@ function AgendamentoForm() {
   const timeoutRef = useRef(null);
   const timeSlotsRef = useRef(null); 
   
+  // DADOS DO BANCO
+  const [servicosDB, setServicosDB] = useState([]);
+  const [perguntasDB, setPerguntasDB] = useState([]);
+  const [respostasTriagem, setRespostasTriagem] = useState({});
+  const [bloqueioExtraCalculado, setBloqueioExtraCalculado] = useState(null);
+
   const [pixData, setPixData] = useState(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const checkingRef = useRef(false);
@@ -244,12 +233,43 @@ function AgendamentoForm() {
 
   const { register, watch, trigger, setValue, formState: { errors }, reset } = useForm({ resolver: zodResolver(schema), mode: "onChange" });
   const formData = watch();
-  const valorEntrada = (formData.tipo_servico === "Exame" ? (PRECOS[formData.subtipo_exame] || 500) : (PRECOS[formData.medico_profissional] || 0)) / 2;
+
+  const fetchBaseData = async () => {
+    const [{ data: srvs }, { data: pergs }, { data: ops }] = await Promise.all([
+      supabase.from("servicos").select("*").eq("ativo", true),
+      supabase.from("perguntas_triagem").select("*").eq("ativa", true),
+      supabase.from("opcoes_triagem").select("*")
+    ]);
+    
+    if (srvs) setServicosDB(srvs);
+    if (pergs && ops) {
+      const pergsFull = pergs.map(p => ({
+        ...p, opcoes: ops.filter(o => o.pergunta_id === p.id)
+      }));
+      setPerguntasDB(pergsFull);
+    }
+  };
+
+  useEffect(() => {
+    fetchBaseData();
+  }, []);
+
+  // CALCULO DO PREÇO DINAMICO
+  const getSelectedService = () => {
+    if (!formData.tipo_servico) return null;
+    const nomeBusca = formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional;
+    return servicosDB.find(s => s.nome === nomeBusca);
+  };
+  
+  const selectedSrv = getSelectedService();
+  const valorEntrada = selectedSrv ? (selectedSrv.preco / 2) : 0;
+  
+  const perguntasAtuais = selectedSrv ? perguntasDB.filter(p => p.servico_id === selectedSrv.id) : [];
 
   const showIsland = (msg, type = "error") => {
     setIslandMessage(msg); setIslandState(type);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (!["loading", "success"].includes(type) && step !== 6) timeoutRef.current = setTimeout(() => setIslandState("default"), 3000);
+    if (!["loading", "success"].includes(type) && step !== 7) timeoutRef.current = setTimeout(() => setIslandState("default"), 3000);
   };
 
   const isStepValid = () => {
@@ -262,25 +282,11 @@ function AgendamentoForm() {
       if (formData.tipo_servico === "Exame" && !formData.subtipo_exame) return false;
       return true;
     }
-    if (step === 3) return formData.modalidade || formData.tipo_servico === "Retorno";
-    if (step === 4) return formData.data_agendamento && formData.horario_agendamento;
+    if (step === 3) return perguntasAtuais.every(p => respostasTriagem[p.id]);
+    if (step === 4) return formData.modalidade || formData.tipo_servico === "Retorno";
+    if (step === 5) return formData.data_agendamento && formData.horario_agendamento;
     return false;
   };
-
-  useEffect(() => {
-    const saved = localStorage.getItem("egastro_agendamento");
-    if (saved) try { const { step: s, data } = JSON.parse(saved); if (s >= 0 && s < 6) { setStep(s); reset(data); } } catch (e) {}
-  }, [reset]);
-
-  useEffect(() => {
-    step < 6 ? localStorage.setItem("egastro_agendamento", JSON.stringify({ step, data: formData })) : localStorage.removeItem("egastro_agendamento");
-  }, [step, formData]);
-
-  useEffect(() => {
-    if (formData.data_agendamento && window.innerWidth < 768 && timeSlotsRef.current) {
-      setTimeout(() => { timeSlotsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300);
-    }
-  }, [formData.data_agendamento]);
 
   useEffect(() => {
     const nomeUrl = searchParams.get("nome"), cpfUrl = searchParams.get("cpf"), medicoUrl = searchParams.get("medico"), wppUrl = searchParams.get("whatsapp");
@@ -294,16 +300,18 @@ function AgendamentoForm() {
       setFlags(f => ({ ...f, cpfUrl: true, nomeUrl: true, sobrenomeUrl: parts.length > 1, telUrl: !!wppUrl, exibirConfUri: !!medicoUrl }));
       setContext(c => ({ ...c, isSmartLink: true, personalizedName: parts[0] || "" }));
       
-      if (medicoUrl) {
-        const servico = MAPA_SERVICOS[medicoUrl];
-        if (servico) {
-          setValue("tipo_servico", servico.tipo);
-          setValue(servico.medico ? "medico_profissional" : "subtipo_exame", servico.medico || servico.exame);
-        } else setValue("medico_profissional", medicoUrl);
+      if (medicoUrl && servicosDB.length > 0) {
+        const srv = servicosDB.find(s => s.nome === medicoUrl);
+        if (srv) {
+          setValue("tipo_servico", srv.tipo);
+          setValue(srv.tipo === "Consulta" ? "medico_profissional" : "subtipo_exame", srv.nome);
+        } else {
+          setValue("medico_profissional", medicoUrl);
+        }
       }
       setStep(0);
     }
-  }, [searchParams, setValue, context.isSmartLink]);
+  }, [searchParams, setValue, context.isSmartLink, servicosDB]);
 
   const handleCpfLookup = async () => {
     if (formData.cpf?.length !== 14) return;
@@ -393,7 +401,9 @@ function AgendamentoForm() {
       if (step === 1 && !(await trigger(["cpf", "nome", "sobrenome", "telefone_whatsapp", "data_nascimento", "email"]))) return showIsland("Verifique os dados informados.");
       
       if (step === 2) {
-        if (flags.exibirConfUri && flags.confirmouUri) return setStep(3);
+        if (flags.exibirConfUri && flags.confirmouUri) {
+          return setStep(perguntasAtuais.length > 0 ? 3 : 4);
+        }
         if (!formData.tipo_servico) return showIsland("Selecione um serviço.");
         if (["Consulta", "Retorno"].includes(formData.tipo_servico) && !formData.medico_profissional) return showIsland("Selecione o profissional.");
         if (formData.tipo_servico === "Exame" && !formData.subtipo_exame) return showIsland("Selecione o exame.");
@@ -405,15 +415,29 @@ function AgendamentoForm() {
           if (!ult.data) return showIsland("Sem histórico de consulta.");
           if (formData.tipo_servico === "Retorno") setContext(c => ({ ...c, dataUltimaConsulta: new Date(ult.data.data_agendamento) }));
         }
-
-        if (formData.tipo_servico === "Exame" && ["Endoscopia Digestiva Alta", "Colonoscopia"].includes(formData.subtipo_exame) && helpers.calcAge(formData.data_nascimento) >= 65 && !window.confirm("Pacientes 65+ exigem liberação cardiológica. Confirma ciência?")) {
-           setIslandState("default"); return;
+        
+        if (perguntasAtuais.length === 0) {
+          setStep(4);
+          setIslandState("default");
+          return;
         }
       }
 
-      if (step === 3 && !formData.modalidade && formData.tipo_servico !== "Retorno") return showIsland("Defina a modalidade.");
+      if (step === 3) {
+        // Encontra o maior bloqueio entre as respostas da triagem
+        let maiorBloqueioTriagem = null;
+        Object.values(respostasTriagem).forEach(opt => {
+          if (opt && opt.regra_bloqueio_dias > 0) {
+            const tempDate = calcularDataLimite(new Date(), opt.regra_bloqueio_dias, opt.tipo_contagem_dias || "corridos");
+            if (!maiorBloqueioTriagem || tempDate > maiorBloqueioTriagem) maiorBloqueioTriagem = tempDate;
+          }
+        });
+        setBloqueioExtraCalculado(maiorBloqueioTriagem);
+      }
+
+      if (step === 4 && !formData.modalidade && formData.tipo_servico !== "Retorno") return showIsland("Defina a modalidade.");
       
-      if (step === 4) {
+      if (step === 5) {
         if (!formData.data_agendamento || !formData.horario_agendamento) return showIsland("Escolha uma data e horário.");
         if (formData.tipo_servico === "Retorno" && context.dataUltimaConsulta && Math.ceil(Math.abs(new Date(formData.data_agendamento) - context.dataUltimaConsulta) / 86400000) > 30) return showIsland("Prazo excedido (> 30 dias).");
         
@@ -422,11 +446,11 @@ function AgendamentoForm() {
             await dispararWebhook(false); 
             await programarMensagensMedicas(formData); 
             showIsland("Agendamento Finalizado", "success"); 
-            return setStep(6); 
+            return setStep(7); 
           }
           return showIsland("Erro ao salvar.");
         }
-        return setStep(5);
+        return setStep(6);
       }
       setStep(p => p + 1); setIslandState("default");
     } finally { setLoading(false); if (islandState === "loading") setIslandState("default"); }
@@ -439,7 +463,7 @@ function AgendamentoForm() {
         const mpPayer = param.formData?.payer || {};
         const payload = {
           ...param.formData,
-          amount: Math.max(valorEntrada, 1),
+          amount: Number(valorEntrada.toFixed(2)), // BUG CORRIGIDO (Permite centavos)
           description: `Entrada - ${formData.medico_profissional || formData.subtipo_exame}`,
           payer: {
             ...mpPayer,
@@ -461,6 +485,7 @@ function AgendamentoForm() {
            const telefonePaciente = formData.telefone_whatsapp;
            const nomePaciente = `${formData.nome} ${formData.sobrenome}`.trim();
            const dataFormatada = formData.data_agendamento.split("-").reverse().join("/");
+           const profName = formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional;
 
            if (!isPix) {
              await dispararWebhook(true);
@@ -469,27 +494,28 @@ function AgendamentoForm() {
              await dispararPushRmChat(
                telefonePaciente, 
                nomePaciente, 
-               `✅ Pagamento recebido com sucesso, ${nomePaciente}!\n\nSua consulta está confirmada para o dia ${dataFormatada} às ${formData.horario_agendamento}.\n\nAguardamos você!`
+               `✅ Pagamento recebido com sucesso, ${nomePaciente}!\n\nSeu agendamento para ${profName} está confirmado para o dia ${dataFormatada} às ${formData.horario_agendamento}.\n\nAguardamos você!`
              );
              showIsland("Pagamento Aprovado", "success");
            } else {
              if (data.transaction_data) {
                setPixData({ ...data.transaction_data, payment_id: data.id });
-               setTimeLeft(300); // 5 minutos de janela para escutar
+               setTimeLeft(300);
                
                const limitDate = new Date(Date.now() + 5 * 60000);
                const hora_limite = `${String(limitDate.getHours()).padStart(2, '0')}:${String(limitDate.getMinutes()).padStart(2, '0')}`;
+               const valorFormatado = valorEntrada.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                
+               // MENSAGEM DO PIX AGORA INFORMA O VALOR
                await dispararPushRmChat(
                  telefonePaciente, 
                  nomePaciente, 
-                 `Olá, ${nomePaciente}! ⏳ Falta pouco para garantir seu agendamento.\n\nPor favor, realize o pagamento via Pix em até 5 minutos (até as ${hora_limite} para finalizar).\n\n🔹 *Chave Pix (Copia e Cola):*\n${data.transaction_data.qr_code}\n\nAssim que o pagamento for processado, você receberá a confirmação automática da sua consulta.`
+                 `Olá, ${nomePaciente}! ⏳ Falta pouco para garantir seu agendamento de ${profName}.\n\nPor favor, realize o pagamento via Pix no valor de *R$ ${valorFormatado}* em até 5 minutos (até as ${hora_limite} para finalizar).\n\n🔹 *Chave Pix (Copia e Cola):*\n${data.transaction_data.qr_code}\n\nAssim que o pagamento for processado, você receberá a confirmação automática.`
                );
              }
              showIsland("Pix gerado com sucesso!", "success");
            }
-
-           setStep(6);
+           setStep(7);
         } else {
            showIsland("Pagamento recusado.");
         }
@@ -500,11 +526,6 @@ function AgendamentoForm() {
     });
   };
 
-  // ==========================================
-  // EFEITOS DE POLLING E COUNTDOWN DO PIX
-  // ==========================================
-  
-  // Efeito Visual: Timer do Countdown regressivo
   useEffect(() => {
     if (!pixData?.payment_id || timeLeft <= 0) return;
     const timerInterval = setInterval(() => {
@@ -519,7 +540,6 @@ function AgendamentoForm() {
     return () => clearInterval(timerInterval);
   }, [pixData?.payment_id]);
 
-  // Função centralizada para verificar o pagamento
   const verificarPagamentoPixAutomatico = async (paymentId) => {
     if (checkingRef.current) return;
     checkingRef.current = true;
@@ -529,7 +549,6 @@ function AgendamentoForm() {
       const result = await res.json();
 
       if (result.success && result.status === "approved") {
-        // Atualiza banco para Pago
         const { data: paciente } = await supabase.from("pacientes").select("id").eq("cpf", formData.cpf).maybeSingle();
         if (paciente) {
           await supabase.from("agendamentos")
@@ -539,43 +558,38 @@ function AgendamentoForm() {
             .eq("horario_agendamento", formData.horario_agendamento);
         }
 
-        // Executa fluxos de aprovação
         await programarMensagensMedicas(formData);
         const nomePaciente = `${formData.nome} ${formData.sobrenome}`.trim();
         const dataFormatada = formData.data_agendamento.split("-").reverse().join("/");
+        const profName = formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional;
 
         await dispararPushRmChat(
           formData.telefone_whatsapp, 
           nomePaciente, 
-          `✅ Pagamento recebido com sucesso, ${nomePaciente}!\n\nSua consulta está confirmada para o dia ${dataFormatada} às ${formData.horario_agendamento}.\n\nAguardamos você!`
+          `✅ Pagamento recebido com sucesso, ${nomePaciente}!\n\nSeu agendamento para ${profName} está confirmado para o dia ${dataFormatada} às ${formData.horario_agendamento}.\n\nAguardamos você!`
         );
 
-        setPixData(null); // Tira QR code da tela
+        setPixData(null); 
         setTimeLeft(0);
         showIsland("Pagamento Confirmado!", "success");
       }
     } catch (e) {
-      console.error("Erro no polling background:", e);
+      console.error("Erro no polling:", e);
     } finally {
       checkingRef.current = false;
     }
   };
 
-  // Efeito Lógico: Polling a cada 10 segundos
   useEffect(() => {
     if (!pixData?.payment_id) return;
-    
     const pollInterval = setInterval(() => {
       if (timeLeftRef.current > 0 && !checkingRef.current) {
         verificarPagamentoPixAutomatico(pixData.payment_id);
       }
-    }, 10000); // 10 Segundos cravados para economizar Supabase
-
+    }, 10000); 
     return () => clearInterval(pollInterval);
   }, [pixData?.payment_id]);
 
-
-  // --- CLASSES CSS COMPARTILHADAS ---
   const cnInputWrap = "relative rounded-xl bg-zinc-50/50 dark:bg-[#111111]/50 border border-zinc-200 dark:border-zinc-800 transition-all duration-300 focus-within:border-zinc-900 dark:focus-within:border-white focus-within:ring-1 focus-within:ring-zinc-900 dark:focus-within:ring-white overflow-hidden";
   const cnInput = "w-full p-3.5 pt-6 bg-transparent outline-none text-zinc-900 dark:text-white font-medium text-[16px] peer placeholder-transparent";
   const cnLabel = "absolute left-3.5 top-2 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest transition-all duration-300 peer-placeholder-shown:top-4 peer-placeholder-shown:text-[14px] peer-placeholder-shown:font-normal peer-placeholder-shown:normal-case peer-placeholder-shown:tracking-normal peer-focus:top-2 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:text-zinc-900 dark:peer-focus:text-white pointer-events-none";
@@ -584,14 +598,13 @@ function AgendamentoForm() {
     <>
       <div className="absolute inset-0 bg-[#FAFAFA] dark:bg-black -z-20 pointer-events-none" />
       
-      {/* ILHA DINÂMICA */}
       <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[9999] w-full px-4 flex justify-center pointer-events-none">
         <motion.div layout className={`pointer-events-auto rounded-full px-5 py-2.5 max-w-sm flex transition-colors shadow-lg ${islandState === "error" ? "bg-red-500 text-white" : islandState === "success" ? "bg-[#9FC131] text-black font-medium" : "bg-black dark:bg-[#111111] text-white border border-transparent dark:border-white/10"}`}>
           <AnimatePresence mode="wait">
              {islandState === "error" && <motion.div key="e" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex items-center gap-2 text-xs"><AlertTriangle size={14} />{islandMessage}</motion.div>}
              {islandState === "success" && <motion.div key="s" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex items-center gap-2 text-xs"><CheckCircle size={14} />{islandMessage}</motion.div>}
              {islandState === "loading" && <motion.div key="l" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex items-center gap-3 text-xs"><Activity size={14} className="animate-spin opacity-80" />{islandMessage || "Processando"}</motion.div>}
-             {islandState === "default" && <motion.div key="d" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex items-center gap-4"><div className="flex gap-1.5">{NOME_ETAPAS.slice(1,6).map((_, i) => <div key={i} className={`h-1 rounded-full transition-all ${step === i + 1 ? "w-4 bg-white" : step > i + 1 ? "w-1.5 bg-white/40" : "w-1.5 bg-white/10"}`}/>)}</div><div className="text-[10px] tracking-widest text-zinc-400 border-l border-zinc-700 pl-4 uppercase">{NOME_ETAPAS[step === 0 ? 1 : step]}</div></motion.div>}
+             {islandState === "default" && <motion.div key="d" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex items-center gap-4"><div className="flex gap-1.5">{NOME_ETAPAS.slice(1,7).map((_, i) => <div key={i} className={`h-1 rounded-full transition-all ${step === i + 1 ? "w-4 bg-white" : step > i + 1 ? "w-1.5 bg-white/40" : "w-1.5 bg-white/10"}`}/>)}</div><div className="text-[10px] tracking-widest text-zinc-400 border-l border-zinc-700 pl-4 uppercase">{NOME_ETAPAS[step === 0 ? 1 : step]}</div></motion.div>}
           </AnimatePresence>
         </motion.div>
       </div>
@@ -599,10 +612,10 @@ function AgendamentoForm() {
       <div className="w-full h-full flex items-center justify-center p-0 md:p-8 pt-24 md:pt-28 z-10">
         <motion.div layout transition={{ type: "spring", stiffness: 450, damping: 35 }} className="w-full max-w-[800px] h-full md:h-[80vh] md:max-h-[700px] bg-white dark:bg-[#0A0A0A] md:rounded-[24px] border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden shadow-sm">
           
-          {step >= 0 && step <= 5 && (
+          {step >= 0 && step <= 6 && (
             <div className="flex items-center justify-between px-6 md:px-10 py-5 border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-[#0A0A0A]/80 backdrop-blur-md">
-              {step > 0 ? <button onClick={() => setStep(p => p - 1)} className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white text-[13px] font-medium"><ChevronLeft size={18} /> Voltar</button> : <div/>}
-              {step !== 5 && !(step === 2 && flags.exibirConfUri && !flags.confirmouUri) && (
+              {step > 0 ? <button onClick={() => setStep(p => (p === 4 && perguntasAtuais.length === 0) ? 2 : p - 1)} className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white text-[13px] font-medium"><ChevronLeft size={18} /> Voltar</button> : <div/>}
+              {step !== 6 && !(step === 2 && flags.exibirConfUri && !flags.confirmouUri) && (
                 <button 
                   onClick={nextStep} 
                   disabled={loading || (step===1 && formData.cpf?.length !== 14)} 
@@ -612,7 +625,7 @@ function AgendamentoForm() {
                       : "bg-zinc-900 dark:bg-white text-white dark:text-black"
                   }`}
                 >
-                  {loading ? "Processando" : (step === 4 && (formData.modalidade === "Convênio" || formData.tipo_servico === "Retorno") ? "Finalizar" : "Continuar")}
+                  {loading ? "Processando" : (step === 5 && (formData.modalidade === "Convênio" || formData.tipo_servico === "Retorno") ? "Finalizar" : "Continuar")}
                   {!loading && <ArrowRight size={16}/>}
                 </button>
               )}
@@ -688,7 +701,7 @@ function AgendamentoForm() {
                         <span className="block font-medium">{formData.medico_profissional || formData.subtipo_exame}</span>
                         <span className="block text-[10px] font-bold text-zinc-400 uppercase mt-1">{formData.tipo_servico}</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-4"><button onClick={() => { setFlags(f => ({...f, exibirConfUri: false})); setValue("medico_profissional", ""); setValue("subtipo_exame", "");}} className="py-3 border rounded-xl font-medium text-sm">Alterar</button><button onClick={() => { setFlags(f => ({...f, confirmouUri: true})); setStep(3); }} className="py-3 bg-zinc-900 text-white dark:bg-white dark:text-black rounded-xl font-medium text-sm">Confirmar</button></div>
+                      <div className="grid grid-cols-2 gap-4"><button onClick={() => { setFlags(f => ({...f, exibirConfUri: false})); setValue("medico_profissional", ""); setValue("subtipo_exame", "");}} className="py-3 border rounded-xl font-medium text-sm">Alterar</button><button onClick={() => { setFlags(f => ({...f, confirmouUri: true})); setStep(perguntasAtuais.length > 0 ? 3 : 4); }} className="py-3 bg-zinc-900 text-white dark:bg-white dark:text-black rounded-xl font-medium text-sm">Confirmar</button></div>
                     </div>
                   ) : (
                     <div className="flex flex-col md:flex-row gap-6 w-full">
@@ -699,10 +712,18 @@ function AgendamentoForm() {
                       </div>
                       <div className="w-full md:w-2/3">
                         {["Consulta", "Retorno"].includes(formData.tipo_servico) && (
-                          <div><label className="text-[10px] font-bold text-zinc-400 uppercase mb-3 block">Corpo Clínico</label><div className="grid gap-3">{Object.keys(PRECOS).filter(k => k.includes("Dr")).map(m => <button key={m} onClick={() => setValue("medico_profissional", m)} className={`p-4 border rounded-xl text-left text-sm ${formData.medico_profissional === m ? "border-zinc-900 font-semibold bg-zinc-50 dark:border-white dark:bg-[#111111]" : "border-zinc-200 dark:border-zinc-800 font-medium text-zinc-600 dark:text-zinc-400"}`}>{m}</button>)}</div></div>
+                          <div><label className="text-[10px] font-bold text-zinc-400 uppercase mb-3 block">Corpo Clínico</label><div className="grid gap-3">
+                            {servicosDB.filter(s => s.tipo === "Consulta").map(m => (
+                              <button key={m.id} onClick={() => setValue("medico_profissional", m.nome)} className={`p-4 border rounded-xl text-left text-sm ${formData.medico_profissional === m.nome ? "border-zinc-900 font-semibold bg-zinc-50 dark:border-white dark:bg-[#111111]" : "border-zinc-200 dark:border-zinc-800 font-medium text-zinc-600 dark:text-zinc-400"}`}>{m.nome}</button>
+                            ))}
+                          </div></div>
                         )}
                         {formData.tipo_servico === "Exame" && (
-                          <div><label className="text-[10px] font-bold text-zinc-400 uppercase mb-3 block">Exames</label><div className="grid gap-3">{["Endoscopia Digestiva Alta", "Colonoscopia", "Retirada de Balão Gástrico"].map(e => <button key={e} onClick={() => setValue("subtipo_exame", e)} className={`p-4 border rounded-xl text-left text-sm ${formData.subtipo_exame === e ? "border-zinc-900 font-semibold bg-zinc-50 dark:border-white dark:bg-[#111111]" : "border-zinc-200 dark:border-zinc-800 font-medium text-zinc-600 dark:text-zinc-400"}`}>{e}</button>)}</div></div>
+                          <div><label className="text-[10px] font-bold text-zinc-400 uppercase mb-3 block">Exames</label><div className="grid gap-3">
+                            {servicosDB.filter(s => s.tipo === "Exame").map(e => (
+                              <button key={e.id} onClick={() => setValue("subtipo_exame", e.nome)} className={`p-4 border rounded-xl text-left text-sm ${formData.subtipo_exame === e.nome ? "border-zinc-900 font-semibold bg-zinc-50 dark:border-white dark:bg-[#111111]" : "border-zinc-200 dark:border-zinc-800 font-medium text-zinc-600 dark:text-zinc-400"}`}>{e.nome}</button>
+                            ))}
+                          </div></div>
                         )}
                       </div>
                     </div>
@@ -711,7 +732,35 @@ function AgendamentoForm() {
               )}
 
               {step === 3 && (
-                <motion.div key="s3" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-lg mx-auto text-center space-y-6">
+                <motion.div key="s3" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-xl mx-auto space-y-6">
+                  <div><h2 className="text-3xl font-medium">Triagem Clínica</h2><p className="text-zinc-500 text-sm mt-2">Responda para prosseguir com o preparo.</p></div>
+                  
+                  <div className="space-y-6 mt-6">
+                    {perguntasAtuais.map((pergunta, index) => (
+                      <div key={pergunta.id} className="p-6 bg-zinc-50 dark:bg-[#111111] border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                        <h4 className="font-medium text-sm flex items-start gap-2 mb-4">
+                          <HelpCircle size={18} className="text-zinc-400 shrink-0 mt-0.5" /> 
+                          {pergunta.pergunta}
+                        </h4>
+                        <div className="grid gap-2">
+                          {pergunta.opcoes.map(opcao => (
+                            <button 
+                              key={opcao.id} 
+                              onClick={() => setRespostasTriagem(prev => ({...prev, [pergunta.id]: opcao}))}
+                              className={`p-3 text-sm text-left border rounded-xl transition-all ${respostasTriagem[pergunta.id]?.id === opcao.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800"}`}
+                            >
+                              {opcao.texto_opcao}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
+              {step === 4 && (
+                <motion.div key="s4" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-lg mx-auto text-center space-y-6">
                   <div><h2 className="text-3xl font-medium">Garantia Financeira</h2><p className="text-zinc-500 text-sm mt-2">Escolha a cobertura.</p></div>
                   {formData.tipo_servico === "Retorno" ? (
                     <div className="p-6 border rounded-2xl"><ShieldCheck className="w-8 h-8 mx-auto mb-4" /><h3 className="text-lg font-medium">Retorno Isento</h3><p className="text-sm text-zinc-500 mt-2">Dentro da janela regulamentar.</p></div>
@@ -725,8 +774,8 @@ function AgendamentoForm() {
                 </motion.div>
               )}
 
-              {step === 4 && (
-                <motion.div key="s4" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-4xl mx-auto">
+              {step === 5 && (
+                <motion.div key="s5" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-4xl mx-auto">
                   <div className="mb-8"><h2 className="text-3xl font-medium">Agendamento</h2><p className="text-zinc-500 text-sm mt-2">Sincronize uma data.</p></div>
                   <div className="flex flex-col md:flex-row gap-8">
                     
@@ -738,10 +787,17 @@ function AgendamentoForm() {
                         {Array.from({ length: new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate() }).map((_, i) => {
                           const d = i + 1, y = calendarMonth.getFullYear(), m = calendarMonth.getMonth();
                           const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                          const isPast = dateStr < helpers.getToday() || [0, 6].includes(new Date(y, m, d).getDay());
+                          
+                          // LÓGICA DE BLOQUEIO DINÂMICO APRIMORADA
+                          const dataSrv = calcularDataLimite(new Date(), selectedSrv?.dias_bloqueio_padrao || 0, selectedSrv?.tipo_contagem_dias || "corridos");
+                          const limiteFinalData = (!bloqueioExtraCalculado || dataSrv > bloqueioExtraCalculado) ? dataSrv : bloqueioExtraCalculado;
+                          
+                          const cellDate = new Date(y, m, d);
+                          const isPastOrBlocked = cellDate <= limiteFinalData || [0, 6].includes(cellDate.getDay());
                           const isSel = formData.data_agendamento === dateStr;
+                          
                           return (
-                            <button key={d} disabled={isPast} onClick={() => setValue("data_agendamento", dateStr)} className={`aspect-square rounded-xl text-sm transition-all ${isPast ? "opacity-50 cursor-not-allowed text-zinc-300 dark:text-zinc-800" : isSel ? "bg-zinc-900 text-white dark:bg-white dark:text-black font-bold scale-105 shadow-md" : "hover:text-zinc-900 font-medium"}`}>{d}</button>
+                            <button key={d} disabled={isPastOrBlocked} onClick={() => setValue("data_agendamento", dateStr)} className={`aspect-square rounded-xl text-sm transition-all ${isPastOrBlocked ? "opacity-50 cursor-not-allowed text-zinc-300 dark:text-zinc-800" : isSel ? "bg-zinc-900 text-white dark:bg-white dark:text-black font-bold scale-105 shadow-md" : "hover:text-zinc-900 font-medium"}`}>{d}</button>
                           );
                         })}
                       </div>
@@ -764,8 +820,8 @@ function AgendamentoForm() {
                 </motion.div>
               )}
 
-              {step === 5 && (
-                <motion.div key="s5" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-md mx-auto">
+              {step === 6 && (
+                <motion.div key="s6" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-md mx-auto">
                   <div className="text-center mb-6"><h2 className="text-3xl font-medium">Checkout</h2><p className="text-zinc-500 text-sm mt-2">Ambiente seguro verificado.</p></div>
                   <div className="p-8 rounded-3xl border bg-white dark:bg-[#0A0A0A] shadow-sm">
                     <div className="flex justify-between border-b pb-4 mb-4"><span className="text-zinc-500 text-sm">{formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional}</span><span className="text-sm">R$ {(valorEntrada*2).toFixed(2)}</span></div>
@@ -775,8 +831,8 @@ function AgendamentoForm() {
                 </motion.div>
               )}
 
-              {step === 6 && (
-                <motion.div key="s6" initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} className="flex flex-col items-center justify-center text-center max-w-sm mx-auto py-8">
+              {step === 7 && (
+                <motion.div key="s7" initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} className="flex flex-col items-center justify-center text-center max-w-sm mx-auto py-8">
                   <div className={`w-16 h-16 rounded-full ${pixData ? "bg-indigo-600" : "bg-zinc-900 dark:bg-white"} text-white ${!pixData && "dark:text-black"} flex items-center justify-center mb-6`}>
                     {pixData ? <CreditCard size={32} /> : <CheckCircle size={32} />}
                   </div>
@@ -784,7 +840,7 @@ function AgendamentoForm() {
                   <h2 className="text-3xl font-medium">{pixData ? "Finalize seu pagamento." : "Agendamento Confirmado."}</h2>
                   <p className="text-zinc-500 mt-3 text-sm">
                     {pixData 
-                      ? `Sua vaga para o dia ${formData.data_agendamento?.split("-").reverse().join("/")} às ${formData.horario_agendamento}h está pré-reservada. Efetue o pagamento para garantir o agendamento.` 
+                      ? `Sua vaga de ${formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional} para o dia ${formData.data_agendamento?.split("-").reverse().join("/")} às ${formData.horario_agendamento}h está pré-reservada. Efetue o pagamento para garantir o agendamento.` 
                       : `Seu agendamento para o dia ${formData.data_agendamento?.split("-").reverse().join("/")} às ${formData.horario_agendamento}h foi registrado com sucesso.`}
                   </p>
 
@@ -807,7 +863,7 @@ function AgendamentoForm() {
                           <div className="text-3xl font-mono font-medium tracking-wider text-zinc-900 dark:text-white">
                             {String(Math.floor(timeLeft / 60)).padStart(2, '0')}:{String(timeLeft % 60).padStart(2, '0')}
                           </div>
-                          {timeLeft === 0 && <span className="text-xs text-red-500 mt-3 font-medium">Tempo limite de verificação automática expirado.</span>}
+                          {timeLeft === 0 && <span className="text-xs text-red-500 mt-3 font-medium">Tempo limite expirado.</span>}
                         </div>
                       </div>
                     </div>
