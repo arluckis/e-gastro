@@ -13,7 +13,7 @@ import {
   ArrowRight, CheckCircle, AlertTriangle, Activity, User, 
   HeartPulse, Search, Pencil, ChevronLeft, ChevronRight, 
   ShieldCheck, CreditCard, Calendar as CalendarIcon, RefreshCw,
-  HelpCircle
+  HelpCircle, MessageCircle, CalendarPlus
 } from "lucide-react";
 
 import Navbar from "@/components/Navbar";
@@ -42,6 +42,13 @@ const dispararPushRmChat = async (telefonePaciente, nomePaciente, textoPersonali
   } catch (error) {
     console.error("❌ Falha RM Chat:", error);
   }
+};
+
+const gerarMensagemConfirmacao = (nome, servico, data, hora, idade) => {
+  const tipoConsulta = servico;
+  const alertaIdade = idade >= 65 ? "\n⚠ Pacientes com 65 anos ou mais devem passar por uma consulta com um cardiologista ou anestesista antes de realizar o exame." : "";
+  
+  return `🩺 Confirmação de Agendamento – Clínica E-Gastro\nOlá! ${nome}\nSua ${tipoConsulta} está agendada para:\n📅 Data: ${data}\n⏰ Horário: ${hora}\n📍 Endereço: Rua João Vieira Carneiro, 957, Pedro Gondim, João Pessoa – PB${alertaIdade}\n\n👉 Veja a localização no Google Maps: https://maps.app.goo.gl/zBF4TNLPVRnxWDcL8`;
 };
 
 const HORARIOS_BASE = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
@@ -122,7 +129,7 @@ const programarMensagensMedicas = async (formData) => {
   mensagens.push({
     telefone_whatsapp, nome_paciente: nome,
     data_hora_programada: gerarData(data_agendamento, horario_agendamento, 0, `${(parseInt(horario_agendamento.split(':')[0]) + 2).toString().padStart(2, '0')}:00`),
-    mensagem: `Olá, ${nome}! Agradecemos muito por escolher nossa clínica para o seu atendimento de ${profName}.\n\nSua opinião é fundamental para nós! Poderia tirar 1 minutinho para avaliar nosso atendimento?\n\nAcesse o link: https://share.google/uFFEOKCkCvbxZMRKU`
+    mensagem: `Obrigada por escolher o E-Gastro! 💙 Se tiver qualquer dúvida ou precisar de suporte, é só nos chamar. Estamos aqui para ajudar sempre! Se for possível, você pode deixar um comentário sobre sua experiência? Isso nos ajuda a melhorar cada vez mais o nosso atendimento 🙏 ➡ https://share.google/uFFEOKCkCvbxZMRKU Agradecemos muito pela sua confiança! 💙`
   });
 
   if (tipo_servico === "Consulta" || tipo_servico === "Retorno") {
@@ -134,20 +141,6 @@ const programarMensagensMedicas = async (formData) => {
   }
 
   if (tipo_servico === "Exame") {
-    mensagens.push({
-      telefone_whatsapp, nome_paciente: nome,
-      data_hora_programada: gerarData(data_agendamento, null, 2, "08:00"),
-      mensagem: `Olá, ${nome}! Seu exame de ${profName} se aproxima. Ele está agendado para o dia ${dataFormatada}.\n\nCaso tenha alguma dúvida sobre o preparo que enviamos anteriormente, nos chame aqui!`
-    });
-
-    if (helpers.calcAge(data_nascimento) >= 65) {
-      mensagens.push({
-        telefone_whatsapp, nome_paciente: nome,
-        data_hora_programada: new Date(Date.now() + 60000).toISOString(), 
-        mensagem: `Olá, ${nome}! Notamos em seu cadastro que você possui 65 anos ou mais. ⚠️ Lembramos que, pela sua segurança, é obrigatório passar por uma consulta prévia com um cardiologista ou anestesista antes de realizar este exame. Por favor, envie a liberação médica por aqui.`
-      });
-    }
-
     if (subtipo_exame === "Endoscopia Digestiva Alta") {
       mensagens.push({
         telefone_whatsapp, nome_paciente: nome, data_hora_programada: new Date(Date.now() + 120000).toISOString(),
@@ -155,33 +148,33 @@ const programarMensagensMedicas = async (formData) => {
       });
       mensagens.push({
         telefone_whatsapp, nome_paciente: nome, data_hora_programada: gerarData(data_agendamento, null, 3, "08:00"),
-        mensagem: `Olá, ${nome}! Fique atento ao preparo da sua Endoscopia daqui a 3 dias.\n\nReforçamos a necessidade de jejum absoluto no dia e a presença obrigatória de um acompanhante maior de idade. Você faz uso de alguma medicação diária contínua? Se sim, nos informe por aqui.`
+        mensagem: `Olá! Seu exame de endoscopia digestiva alta está chegando. Por aqui já queremos garantir que tudo dê certo, então fique atento(a) ao preparo: ⚠ O exame exige jejum absoluto! Nos próximos dias, enviaremos lembretes com horários e detalhes do jejum. Se faz uso de medicações diariamente ou tiver alguma dúvida sobre seus remédios, nos avise. Lembre também de providenciar um(a) acompanhante maior de 18 anos para o dia do exame!`
       });
       mensagens.push({
         telefone_whatsapp, nome_paciente: nome, data_hora_programada: gerarData(data_agendamento, null, 1, "08:00"),
-        mensagem: `Olá, ${nome}! Seu exame é amanhã. Atenção à regra do jantar de hoje:\n\n🥩 Se o jantar tiver carne: O jejum deve começar 12 horas antes do exame.\n🥗 Se o jantar NÃO tiver carne: O jejum deve começar 8 horas antes do exame.`
+        mensagem: `Faltam 24 horas para sua endoscopia! Hoje, preste atenção ao jantar: 🍽 Se jantar carne, o jejum deve começar 12 horas antes do exame. 🥗 Se NÃO jantar carne, o jejum pode iniciar 8 horas antes. Lembre-se de não comer ou beber mais nada a partir do horário recomendado, nem mesmo água. Tenha certeza de que seu acompanhante está confirmado para o dia do exame! Se tomou medicação hoje, siga rigorosamente a orientação do seu médico.`
       });
       mensagens.push({
         telefone_whatsapp, nome_paciente: nome, data_hora_programada: gerarData(data_agendamento, null, 1, "20:00"),
-        mensagem: `Boa noite, ${nome}! Lembre-se de iniciar o seu jejum agora ou nas próximas horas, dependendo do que você jantou (conforme nossa mensagem anterior).\n\n💧 O consumo de água ou água de coco está liberado apenas até 3 horas antes do horário do seu exame.`
+        mensagem: `Está chegando a hora! Reforçando:\nSe consumiu carne no jantar, inicie seu jejum agora.\nSe não consumiu carne, você pode iniciar o jejum 8 horas antes do exame. A partir do início do jejum, não coma nem beba NADA, obs: noticia boa a agua ou agua de coco pode ser consumido ate 3 horas antes do exame. Qualquer dúvida de última hora, chame a gente!`
       });
       mensagens.push({
         telefone_whatsapp, nome_paciente: nome, data_hora_programada: gerarData(data_agendamento, null, 0, "06:00"),
-        mensagem: `Bom dia, ${nome}! Hoje é o dia do seu exame.\n\n⚠️ A partir de agora, o jejum é TOTAL (inclusive água e chicletes).\n\n*Lembretes:* Venha com roupas leves, sem joias ou metais, traga um documento com foto e venha acompanhado por um maior de idade.\n📍 Nossa localização: [Inserir Link do Maps]`
+        mensagem: `Hoje é o dia do seu exame de endoscopia! Lembre-se:\nO jejum precisa ser absoluto (inclusive água, balas, chicletes)\nTraga um documento com foto\n\nVenha SEM acessorios 💍 e objetos metálicos\nVenha acompanhado(a) por um adulto maior de 18 anos\nRoupas leves, (Bermuda, vestido…) 📍 Endereço da Clínica para sua Endoscopia: Rua João Vieira Carneiro, 957 Bairro: Pedro Gondim, João Pessoa - PB 👉 Clique aqui para abrir no Google Maps: https://maps.app.goo.gl/zBF4TNLPVRnxWDcL8 Se precisar de qualquer orientação para chegar até o local, estamos à disposição! 😊`
       });
     }
 
     if (subtipo_exame === "Colonoscopia") {
       mensagens.push({
         telefone_whatsapp, nome_paciente: nome, data_hora_programada: new Date(Date.now() + 120000).toISOString(),
-        mensagem: `Olá, ${nome}! Segue o guia de preparo OBRIGATÓRIO para sua Colonoscopia:\n\n⏳ *3 DIAS ANTES:*\nSuspenda sementes, amendoim, nozes, castanhas e cereais integrais.\n\n⏳ *1 DIA ANTES (VÉSPERA):*\n- Dieta leve permitida APENAS até o almoço;\n- Após o almoço: PROIBIDO alimentos sólidos. Apenas líquidos claros;\n- Às 11:00h: Tomar 3 comprimidos de Dulcolax ou Bisacodil (Idosos: 2; Em caso de diarreia: 1);\n- Às 18:00h: Tomar 2 sachês de Picoprep + Simeticona dissolvidos.\n\n⏳ *DIA DO EXAME (6 a 8 horas antes):*\n- Tomar mais 2 sachês de Picoprep + Simeticona;\n- Jejum completo para alimentos sólidos.\n- Líquidos claros permitidos apenas até 3 horas antes do exame.`
+        mensagem: `Guia de Preparo para Colonoscopia Com PICOPREP - e-GASTRO\n\nÉ fundamental que o intestino esteja sem resíduos fecais para que a colonoscopia possa ser realizada com segurança e qualidade. Com esse objetivo em mente, solicitamos seguir à risca as orientações abaixo.\n\nCOMO DEVE SER A ALIMENTAÇÃO NOS DIAS QUE ANTECEDEM O EXAME?\n. 3 dias antes da colonoscopia: Suspender a ingestão de sementes, amendoim, nozes, avelã, castanhas e cereais integrais, como: linhaça, trigo, aveia, centeio, cevada, quinoa, granola e cereais matinais.\n. 1 dia antes da colonoscopia dieta leve até o almoço. Após o almoço, não ingerir mais nada sólido ( ! )\nPERMITIDO: purê de batatas ou aipim, arroz branco, ovo cozido, frango ou peixe grelhados, batata cozida, caldo ou sopa COADOS, macarrão sem molho, biscoito de água e sal, pão de forma ou francês, torrada e gelatina, suco COADO, chás claros, água de côco.\nPROIBIDO: Carnes vermelhas, milho, verduras e legumes em geral, frutas, leite e derivados (iogurte, queijo etc), bebidas escuras (suco de uva, café, coca cola, chá preto, chá mate e bebidas alcoólicas). Após o almoço, não ingerir mais nada sólido, ingerir apenas líquidos claros (2 litros), como: água, água de coco ou Gatorade® de laranja ou limão, caldos claros coados.\n\nNO DIA DO EXAME: JEJUM COMPLETO DE ALIMENTOS!\nJejum absoluto no dia do exame é essencial para garantir a segurança e qualidade da colonoscopia. Para evitar desidratação, que pode ocorrer com o uso de laxantes, procure ingerir 1-2 litros de líquidos claros. É permitido a ingestão de água, água de côco ou Gatorade® de laranja ou limão até 3 horas antes do exame! Suspender completamente a ingestão de líquidos 3 horas antes da colonoscopia.\n\nCOMO E QUANDO DEVO TOMAR OS LAXANTES PARA A LIMPEZA INTESTINAL?\nPara a limpeza intestinal é necessário o uso de 2 tipos de laxantes: GUTTALAX e PICOPREP + SIMETICONA. O ideal é que ocorram de 8-12 evacuações para a limpeza completa do intestino. Um sinal de que o preparo intestinal ficou bom é a eliminação de fezes completamente líquidas, com aspecto de urina amarelo-esverdeada.\n\n1º LAXANTE: Para ser usado 1 dia antes do exame (véspera), às 11:00h:\nDUCOLAX ou BISACODIL 5MG: tomar 03 comprimidos. Esse laxante leva cerca de 6 horas para fazer efeito. OBS.: se idoso, usar só 02 comp. : se diarreia, usar só 01 comp.\n\n2º LAXANTE: O horário de tomada do PICOPREP varia conforme o período em que foi agendado o exame.\nPICOPREP + SIMETICONA:\n- usar 2 sachês dissolvidos às 18 horas\n- usar mais 2 sachês 6 a 8 horas antes do horário agendado do exame.\n\nCOMO PREPARAR? Dissolver os sachês em 200 ml de água na temperatura natural e 50 gotas de SIMETICONA (primeiro colocar a água no copo e depois o pó, esperar esfriar). Após ingerir cada preparo, tomar 1,5 litros de água, água de côco ou Gatorate, em pequenos goles - parar 3 horas antes do exame!!!\n\nO QUE FAZER EM CASO DE NÁUSEAS, VÔMITOS OU DOR NA BARRIGA? Em caso de náuseas e/ou vômitos, VONAU 8 mg, 1 cp, via sublingual, podendo repetir a dose em 2 horas, se não melhorar. Em caso de cólicas na barriga, BUSCOPAN COMPOSTO ou BUSCODUO (para alérgicos à dipirona), 1 cp, via oral, podendo repetir a dose em 6 horas, se não melhorar.`
       });
     }
 
     if (subtipo_exame === "Retirada de Balão Gástrico") {
       mensagens.push({
         telefone_whatsapp, nome_paciente: nome, data_hora_programada: new Date(Date.now() + 120000).toISOString(),
-        mensagem: `Olá, ${nome}! Segue o protocolo para a retirada do seu Balão Gástrico:\n\n📅 *1 SEMANA ANTES:* Tomar 1 cápsula de Fluconazol 150mg.\n📅 *3 DIAS ANTES:* Iniciar dieta ESTRITA apenas com líquidos restritos. Tomar 1 litro de Coca-Cola Zero por dia. 🚫 Proibido proteínas ou suplementos.\n📅 *VÉSPERA:* Tomar Digesan (cápsula ou 35 gotas) 3 vezes ao dia.\n📅 *DIA DO PROCEDIMENTO:* Jejum de alimentos de 12 horas (água liberada até 3 horas antes). Comparecimento OBRIGATÓRIO com um responsável.`
+        mensagem: `Estas são as orientações para a retirada do seu balão Gástrico: 🙂\n\nDieta 3 dias que antecedem a retirada do balão só LIQUIDOS RESTRITOS ( água, água de coco, chás, gatorate, suco coado, sorvete e picolé de fruta SEM LEITE, GELATINA e caldo de legumes COADO)☕\nTomar 1 litro de coca-cola ZERO nos 3 dias que antecedem a retirada( 1 litros a cada dia) 3\n. Tomar 01 cápsula de FLUCONAZOL 150mg 1 semana antes da retirada\nJejum de 12 horas antes da retirada ( só pode água até 3 horas antes do exame) ⚠\n\nVir acompanhado com um responsável 👫\nNão consumir proteínas ou suplementos. 🍖\n\nPode tomar as suas medicações rotineiras( pressão, diabetes, tireóide,...)💊\nDIGESAN capsula ou gotas vespera 3 x ao dia ( 35 gotas)\n3 dias antes dieta liquida clara restrita igual do inicio do balão.`
       });
     }
   }
@@ -450,6 +443,15 @@ function AgendamentoForm() {
           if (await salvarNoBanco(false)) { 
             await dispararWebhook(false); 
             await programarMensagensMedicas(formData); 
+            
+            // Disparo de push logo após finalizar o agendamento Convênio/Retorno
+            const nomePaciente = `${formData.nome} ${formData.sobrenome}`.trim();
+            const profName = formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional;
+            const dataFormatada = formData.data_agendamento.split("-").reverse().join("/");
+            const msgConfirmacao = gerarMensagemConfirmacao(nomePaciente, profName, dataFormatada, formData.horario_agendamento, helpers.calcAge(formData.data_nascimento));
+            
+            await dispararPushRmChat(formData.telefone_whatsapp, nomePaciente, msgConfirmacao);
+
             showIsland("Agendamento Finalizado", "success"); 
             return setStep(7); 
           }
@@ -496,11 +498,9 @@ function AgendamentoForm() {
              await dispararWebhook(true);
              await programarMensagensMedicas(formData);
              
-             await dispararPushRmChat(
-               telefonePaciente, 
-               nomePaciente, 
-               `✅ Pagamento recebido com sucesso, ${nomePaciente}!\n\nSeu agendamento para ${profName} está confirmado para o dia ${dataFormatada} às ${formData.horario_agendamento}.\n\nAguardamos você!`
-             );
+             const msgConfirmacao = gerarMensagemConfirmacao(nomePaciente, profName, dataFormatada, formData.horario_agendamento, helpers.calcAge(formData.data_nascimento));
+             await dispararPushRmChat(telefonePaciente, nomePaciente, `✅ Pagamento recebido com sucesso!\n\n` + msgConfirmacao);
+
              showIsland("Pagamento Aprovado", "success");
            } else {
              if (data.transaction_data) {
@@ -567,10 +567,12 @@ function AgendamentoForm() {
         const dataFormatada = formData.data_agendamento.split("-").reverse().join("/");
         const profName = formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional;
 
+        const msgConfirmacao = gerarMensagemConfirmacao(nomePaciente, profName, dataFormatada, formData.horario_agendamento, helpers.calcAge(formData.data_nascimento));
+
         await dispararPushRmChat(
           formData.telefone_whatsapp, 
           nomePaciente, 
-          `✅ Pagamento recebido com sucesso, ${nomePaciente}!\n\nSeu agendamento para ${profName} está confirmado para o dia ${dataFormatada} às ${formData.horario_agendamento}.\n\nAguardamos você!`
+          `✅ Pagamento Pix confirmado!\n\n` + msgConfirmacao
         );
 
         setPixData(null); 
@@ -641,7 +643,9 @@ function AgendamentoForm() {
               
               {step === 0 && (
                 <motion.div key="s0" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="text-center mt-20 max-w-sm mx-auto">
-                  <h1 className="text-4xl md:text-5xl font-light">Olá, <span className="font-medium">{context.personalizedName}</span>.</h1>
+                  <h1 className="text-4xl md:text-5xl font-light">
+                    Olá{context.personalizedName ? <><span className="font-medium">, {context.personalizedName}</span></> : ""}.
+                  </h1>
                   <p className="text-zinc-500 mt-4 text-sm">Conectamos o seu painel de agendamento ao ambiente clínico em segurança.</p>
                 </motion.div>
               )}
@@ -792,7 +796,12 @@ function AgendamentoForm() {
                           const d = i + 1, y = calendarMonth.getFullYear(), m = calendarMonth.getMonth();
                           const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                           
-                          const dataSrv = calcularDataLimite(new Date(), selectedSrv?.dias_bloqueio_padrao || 0, selectedSrv?.tipo_contagem_dias || "corridos");
+                          // Regra deduzida da clínica para evitar agendamento amanhã para exames. 
+                          // Bloqueio garantido de pelo menos 1 dia independente do DB, se for Exame.
+                          const minDiasBloqueio = formData.tipo_servico === "Exame" ? 1 : 0;
+                          const diasBloqueioPadrao = Math.max(selectedSrv?.dias_bloqueio_padrao || 0, minDiasBloqueio);
+
+                          const dataSrv = calcularDataLimite(new Date(), diasBloqueioPadrao, selectedSrv?.tipo_contagem_dias || "corridos");
                           const limiteFinalData = (!bloqueioExtraCalculado || dataSrv > bloqueioExtraCalculado) ? dataSrv : bloqueioExtraCalculado;
                           
                           const cellDate = new Date(y, m, d);
@@ -876,6 +885,20 @@ function AgendamentoForm() {
                     <div className="flex justify-between mb-4"><span className="text-[10px] font-bold text-zinc-500 uppercase">Paciente</span><span className="text-sm font-medium">{formData.nome}</span></div>
                     <div className="flex justify-between border-t pt-4"><span className="text-[10px] font-bold text-zinc-500 uppercase">Status</span><span className="text-sm font-mono">{pixData ? "Aguardando Pagamento" : "Confirmado"}</span></div>
                   </div>
+
+                  {/* Renderização condicional dos botões solicitados: Só exibem depois do processo de pagamento concluído OU para convênios */}
+                  {!pixData && (
+                    <div className="mt-6 flex flex-col gap-3 w-full">
+                      <button onClick={() => window.open(`https://wa.me/5583999999999`, "_blank")} className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
+                        <MessageCircle size={18} />
+                        Falar no WhatsApp
+                      </button>
+                      <button onClick={() => window.location.reload()} className="w-full py-3.5 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-900 dark:text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-colors">
+                        <CalendarPlus size={18} />
+                        Realizar Novo Agendamento
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

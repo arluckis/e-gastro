@@ -26,7 +26,7 @@ export async function GET(request) {
       if (num.length === 11 && num.charAt(2) === '9') {
         num = num.substring(0, 2) + num.substring(3);
       }
-      const numeroLimpo = "55" + num;
+      const numeroLimpo = num;
       
       try {
         await axios.post(URL_RMCHAT, { 
