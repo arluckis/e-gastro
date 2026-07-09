@@ -263,10 +263,22 @@ function AgendamentoForm() {
     fetchBaseData();
   }, []);
 
+  // Busca do serviço de forma mais inteligente para evitar problemas de case, espaços ou pontos
   const getSelectedService = () => {
     if (!formData.tipo_servico) return null;
     const nomeBusca = formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional;
-    return servicosDB.find(s => s.nome === nomeBusca);
+    if (!nomeBusca) return null;
+    
+    // Tentativa 1: Busca exata ignorando case/espaços extras
+    let srv = servicosDB.find(s => s.nome.trim().toLowerCase() === nomeBusca.trim().toLowerCase());
+    
+    // Tentativa 2: Busca aproximada ignorando o "Dra." / "Dr." caso haja diferença de escrita no banco
+    if (!srv) {
+      const nomeLimpo = nomeBusca.toLowerCase().replace(/dra\.|dr\./g, "").trim();
+      srv = servicosDB.find(s => s.nome.toLowerCase().includes(nomeLimpo));
+    }
+    
+    return srv;
   };
   
   const selectedSrv = getSelectedService();
@@ -312,13 +324,20 @@ function AgendamentoForm() {
         setValue("sobrenome", parts.slice(1).join(" ") || "");
       }
       if (cpfUrl) setValue("cpf", masks.cpf(cpfUrl));
-      if (wppUrl) setValue("telefone_whatsapp", masks.phone(wppUrl));
+      
+      // Filtro para remover o 55 do WhatsApp caso ele venha na URL
+      let limpaWpp = wppUrl ? wppUrl.replace(/\D/g, "") : "";
+      if (limpaWpp.startsWith("55") && (limpaWpp.length === 12 || limpaWpp.length === 13)) {
+        limpaWpp = limpaWpp.substring(2);
+      }
+      if (limpaWpp) setValue("telefone_whatsapp", masks.phone(limpaWpp));
+      
       if (emailUrl) setValue("email", emailUrl);
       if (nascUrl) setValue("data_nascimento", masks.date(nascUrl));
 
       const hasCpf = !!(cpfUrl && cpfUrl.trim() !== "");
       const hasNome = !!(nomeUrl && nomeUrl.trim() !== "");
-      const hasTel = !!(wppUrl && wppUrl.trim() !== "");
+      const hasTel = !!(limpaWpp && limpaWpp.trim() !== "");
       const hasEmail = !!(emailUrl && emailUrl.trim() !== "");
       const hasNasc = !!(nascUrl && nascUrl.trim() !== "");
       const hasMedico = !!(medicoUrl && medicoUrl.trim() !== "");
@@ -357,7 +376,7 @@ function AgendamentoForm() {
       }
 
       const cpfValid = cpfUrl && cpfUrl.replace(/\D/g, "").length === 11;
-      const telValid = wppUrl && wppUrl.replace(/\D/g, "").length >= 10;
+      const telValid = limpaWpp.length >= 10;
       const nomeValid = nomeUrl && nomeUrl.trim().split(" ").length > 1;
 
       if (cpfValid && telValid && nomeValid && hasEmail && hasNasc) {
