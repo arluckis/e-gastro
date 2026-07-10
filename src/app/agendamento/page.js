@@ -197,11 +197,11 @@ export default function AgendamentoPremium() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
 
   return (
-    <div className="flex min-h-screen w-full bg-[#FAFAFA] dark:bg-black text-zinc-900 dark:text-zinc-50 transition-colors duration-500 font-sans antialiased">
+    <div className="flex min-h-[100dvh] w-full bg-[#FAFAFA] dark:bg-black text-zinc-900 dark:text-zinc-50 transition-colors duration-500 font-sans antialiased">
       <SidebarPremium isExpanded={isSidebarExpanded} setIsExpanded={setIsSidebarExpanded} />
       <Navbar />
-      <main className={`flex-1 relative flex flex-col items-center transition-[margin] duration-500 ease-in-out w-full h-full min-h-screen overflow-hidden ${isSidebarExpanded ? "md:ml-[260px]" : "md:ml-[88px]"}`}>
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center w-full"><motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }} className="w-8 h-8 border-[3px] border-zinc-900 border-t-transparent rounded-full" /></div>}>
+      <main className={`flex-1 relative flex flex-col items-center transition-[margin] duration-500 ease-in-out w-full min-h-[100dvh] overflow-hidden ${isSidebarExpanded ? "md:ml-[260px]" : "md:ml-[88px]"}`}>
+        <Suspense fallback={<div className="min-h-[100dvh] flex items-center justify-center w-full"><motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }} className="w-8 h-8 border-[3px] border-zinc-900 dark:border-white border-t-transparent rounded-full" /></div>}>
           <AgendamentoForm />
         </Suspense>
       </main>
@@ -511,6 +511,11 @@ function AgendamentoForm() {
       }
 
       if (step === 3) {
+        // Validação Rígida da Triagem
+        if (!isStepValid()) {
+          return showIsland("Responda todas as perguntas obrigatórias da triagem.");
+        }
+
         let maiorBloqueioTriagem = null;
         Object.values(respostasTriagem).forEach(opt => {
           if (opt && opt.regra_bloqueio_dias > 0) {
@@ -683,9 +688,9 @@ function AgendamentoForm() {
     return () => clearInterval(pollInterval);
   }, [pixData?.payment_id]);
 
-  const cnInputWrap = "relative rounded-xl bg-zinc-50/50 dark:bg-[#111111]/50 border border-zinc-200 dark:border-zinc-800 transition-all duration-300 focus-within:border-zinc-900 dark:focus-within:border-white focus-within:ring-1 focus-within:ring-zinc-900 dark:focus-within:ring-white overflow-hidden";
-  const cnInput = "w-full p-3.5 pt-6 bg-transparent outline-none text-zinc-900 dark:text-white font-medium text-[16px] peer placeholder-transparent";
-  const cnLabel = "absolute left-3.5 top-2 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest transition-all duration-300 peer-placeholder-shown:top-4 peer-placeholder-shown:text-[14px] peer-placeholder-shown:font-normal peer-placeholder-shown:normal-case peer-placeholder-shown:tracking-normal peer-focus:top-2 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:text-zinc-900 dark:peer-focus:text-white pointer-events-none";
+  const cnInputWrap = "relative rounded-2xl bg-zinc-50/50 dark:bg-[#111111]/50 border border-zinc-200/80 dark:border-zinc-800/80 transition-all duration-300 focus-within:border-zinc-900 dark:focus-within:border-white focus-within:bg-white dark:focus-within:bg-[#0A0A0A] focus-within:shadow-[0_4px_20px_rgba(0,0,0,0.03)] focus-within:ring-1 focus-within:ring-zinc-900 dark:focus-within:ring-white overflow-hidden";
+  const cnInput = "w-full p-4 pt-7 bg-transparent outline-none text-zinc-900 dark:text-white font-medium text-[16px] peer placeholder-transparent";
+  const cnLabel = "absolute left-4 top-2 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest transition-all duration-300 peer-placeholder-shown:top-4.5 peer-placeholder-shown:text-[14px] peer-placeholder-shown:font-normal peer-placeholder-shown:normal-case peer-placeholder-shown:tracking-normal peer-focus:top-2 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:text-zinc-900 dark:peer-focus:text-white pointer-events-none";
 
   const renderLockedOrInput = (formKey, label, value, isLocked, maskFn, placeholder, maxLength, type = "text") => {
     if (isLocked && value) {
@@ -722,43 +727,61 @@ function AgendamentoForm() {
 
   return (
     <>
-      <div className="absolute inset-0 bg-[#FAFAFA] dark:bg-black -z-20 pointer-events-none" />
+      <div className="fixed inset-0 bg-[#FAFAFA] dark:bg-black -z-20 pointer-events-none" />
       
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[9999] w-full px-4 flex justify-center pointer-events-none">
-        <motion.div layout className={`pointer-events-auto rounded-full px-5 py-2.5 max-w-sm flex transition-colors shadow-lg ${islandState === "error" ? "bg-red-500 text-white" : islandState === "success" ? "bg-[#9FC131] text-black font-medium" : "bg-black dark:bg-[#111111] text-white border border-transparent dark:border-white/10"}`}>
+      {/* Dynamic Island Feedback - Centralizada no container MAIN ignorando a sidebar */}
+      <div className="absolute top-6 left-0 right-0 w-full z-[9999] px-4 flex justify-center pointer-events-none">
+        <motion.div layout className={`pointer-events-auto rounded-full px-5 py-2.5 max-w-sm flex transition-colors shadow-[0_8px_30px_rgb(0,0,0,0.12)] ${islandState === "error" ? "bg-red-500 text-white" : islandState === "success" ? "bg-[#9FC131] text-black font-medium" : "bg-black/90 dark:bg-white/90 backdrop-blur-xl text-white dark:text-black border border-transparent dark:border-black/10"}`}>
           <AnimatePresence mode="wait">
              {islandState === "error" && <motion.div key="e" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex items-center gap-2 text-xs"><AlertTriangle size={14} />{islandMessage}</motion.div>}
              {islandState === "success" && <motion.div key="s" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex items-center gap-2 text-xs"><CheckCircle size={14} />{islandMessage}</motion.div>}
              {islandState === "loading" && <motion.div key="l" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex items-center gap-3 text-xs"><Activity size={14} className="animate-spin opacity-80" />{islandMessage || "Processando"}</motion.div>}
-             {islandState === "default" && <motion.div key="d" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex items-center gap-4"><div className="flex gap-1.5">{NOME_ETAPAS.slice(1,7).map((_, i) => <div key={i} className={`h-1 rounded-full transition-all ${step === i + 1 ? "w-4 bg-white" : step > i + 1 ? "w-1.5 bg-white/40" : "w-1.5 bg-white/10"}`}/>)}</div><div className="text-[10px] tracking-widest text-zinc-400 border-l border-zinc-700 pl-4 uppercase">{NOME_ETAPAS[step === 0 ? 1 : step]}</div></motion.div>}
+             {islandState === "default" && <motion.div key="d" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex items-center gap-4"><div className="flex gap-1.5">{NOME_ETAPAS.slice(1,7).map((_, i) => <div key={i} className={`h-1.5 rounded-full transition-all ${step === i + 1 ? "w-4 bg-white dark:bg-black" : step > i + 1 ? "w-1.5 bg-white/40 dark:bg-black/40" : "w-1.5 bg-white/10 dark:bg-black/10"}`}/>)}</div><div className="text-[10px] tracking-widest text-zinc-400 dark:text-zinc-500 border-l border-zinc-700 dark:border-zinc-300 pl-4 uppercase">{NOME_ETAPAS[step === 0 ? 1 : step]}</div></motion.div>}
           </AnimatePresence>
         </motion.div>
       </div>
 
-      <div className="w-full h-full flex items-center justify-center p-0 md:p-8 pt-24 md:pt-28 z-10">
-        <motion.div layout transition={{ type: "spring", stiffness: 450, damping: 35 }} className="w-full max-w-[800px] h-full md:h-[80vh] md:max-h-[700px] bg-white dark:bg-[#0A0A0A] md:rounded-[24px] border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden shadow-sm">
+      <div className="w-full h-[100dvh] flex flex-col items-center justify-center p-0 md:p-8 pt-[70px] md:pt-[90px] z-10 relative">
+        <motion.div layout transition={{ type: "spring", stiffness: 450, damping: 35 }} className="w-full max-w-[800px] flex-1 md:flex-none md:h-[85vh] md:max-h-[750px] bg-white dark:bg-[#0A0A0A] md:rounded-[32px] border-0 md:border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden shadow-2xl md:shadow-[0_20px_60px_rgba(0,0,0,0.06)] dark:md:shadow-[0_20px_60px_rgba(0,0,0,0.3)] relative">
           
+          {/* HEADER FIXO DO MODAL */}
           {step >= 0 && step <= 6 && (
-            <div className="flex items-center justify-between px-6 md:px-10 py-5 border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-[#0A0A0A]/80 backdrop-blur-md">
-              {step > 0 ? <button onClick={() => setStep(p => (p === 4 && perguntasAtuais.length === 0) ? 2 : p - 1)} className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white text-[13px] font-medium"><ChevronLeft size={18} /> Voltar</button> : <div/>}
-              {step !== 6 && !(step === 2 && flags.exibirConfUri && !flags.confirmouUri) && (
-                <button 
-                  onClick={nextStep} 
-                  disabled={loading || (step===1 && formData.cpf?.length !== 14)} 
-                  className={`font-bold text-[12px] px-6 py-2.5 rounded-full flex items-center gap-2 uppercase transition-colors disabled:opacity-40 ${
-                    isStepValid() 
-                      ? "bg-green-600 hover:bg-green-700 text-white" 
-                      : "bg-zinc-900 dark:bg-white text-white dark:text-black"
-                  }`}
-                >
-                  {loading ? "Processando" : (step === 5 && (formData.modalidade === "Convênio" || formData.tipo_servico === "Retorno") ? "Finalizar" : "Continuar")}
-                  {!loading && <ArrowRight size={16}/>}
-                </button>
-              )}
+            <div className="flex-none grid grid-cols-3 items-center px-4 md:px-8 py-3 md:py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-[#0A0A0A]/90 backdrop-blur-md z-20">
+              
+              <div className="flex justify-start">
+                {step > 0 ? (
+                  <button onClick={() => setStep(p => (p === 4 && perguntasAtuais.length === 0) ? 2 : p - 1)} className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white text-[13px] font-medium transition-colors">
+                    <ChevronLeft size={18} /> Voltar
+                  </button>
+                ) : <div />}
+              </div>
+              
+              <div className="flex justify-center text-[10px] md:text-[11px] uppercase tracking-widest font-bold text-zinc-400 dark:text-zinc-500 whitespace-nowrap">
+                {step > 0 && step <= 6 ? `Etapa ${step} de 6` : ''}
+              </div>
+
+              <div className="flex justify-end">
+                {step !== 6 && !(step === 2 && flags.exibirConfUri && !flags.confirmouUri) ? (
+                  <button
+                    onClick={nextStep}
+                    disabled={loading || (step === 1 && formData.cpf?.length !== 14)}
+                    className={`font-bold text-[12px] px-5 py-2.5 rounded-full flex items-center justify-center gap-1.5 uppercase transition-all duration-300 shadow-sm whitespace-nowrap ${
+                      isStepValid()
+                        ? "bg-zinc-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black hover:scale-[1.02] active:scale-[0.98]"
+                        : "bg-zinc-100 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-600"
+                    }`}
+                  >
+                    {loading ? "Processando" : (step === 5 && (formData.modalidade === "Convênio" || formData.tipo_servico === "Retorno") ? "Finalizar" : "Continuar")}
+                    {!loading && <ArrowRight size={14}/>}
+                  </button>
+                ) : <div />}
+              </div>
+
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-12">
+          {/* CORPO ROLÁVEL */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-12 pb-16 md:pb-12">
             <AnimatePresence mode="wait">
               
               {step === 0 && (
@@ -775,7 +798,7 @@ function AgendamentoForm() {
                   <div><h2 className="text-3xl font-medium">Dados de Acesso</h2><p className="text-zinc-500 text-sm mt-2">Verifique ou insira as informações.</p></div>
                   
                   {context.isSmartLink && !flags.unlockedAll ? (
-                    <div className="p-7 bg-zinc-50/50 dark:bg-[#111111]/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm">
+                    <div className="p-7 bg-zinc-50/80 dark:bg-[#111111]/80 border border-zinc-200/80 dark:border-zinc-800/80 rounded-3xl shadow-sm">
                       <div className="flex justify-between items-start mb-6">
                         <h3 className="text-lg font-medium">Dados do Paciente</h3>
                         <button onClick={() => setFlags(f => ({ ...f, unlockedAll: true }))} className="text-[11px] font-bold uppercase text-zinc-500 hover:text-zinc-900 dark:hover:text-white flex gap-1.5 items-center transition-colors">
@@ -845,16 +868,16 @@ function AgendamentoForm() {
                       <h3 className="text-2xl font-medium">Verificação de Agendamento</h3>
                       <p className="text-zinc-500 text-sm mt-2">Você selecionou através do WhatsApp:</p>
                       
-                      <div className="my-6 inline-block bg-zinc-50 dark:bg-[#111111] border border-zinc-200 dark:border-zinc-800 px-8 py-5 rounded-2xl w-full shadow-sm">
+                      <div className="my-6 inline-block bg-zinc-50 dark:bg-[#111111] border border-zinc-200 dark:border-zinc-800 px-8 py-5 rounded-3xl w-full shadow-sm">
                         <span className="block font-semibold text-lg text-zinc-900 dark:text-white">{formData.medico_profissional || formData.subtipo_exame}</span>
                         <span className="block text-[11px] font-bold text-zinc-400 uppercase mt-2 tracking-widest">{formData.tipo_servico}</span>
                       </div>
 
                       <div className="flex flex-col sm:flex-row gap-3 mt-4">
-                        <button onClick={() => { setFlags(f => ({...f, confirmouUri: true})); setStep(perguntasAtuais.length > 0 ? 3 : 4); }} className="w-full sm:w-1/2 py-3.5 bg-zinc-900 text-white dark:bg-white dark:text-black rounded-xl font-bold text-sm shadow-md transition-transform hover:scale-[1.02]">
+                        <button onClick={() => { setFlags(f => ({...f, confirmouUri: true})); setStep(perguntasAtuais.length > 0 ? 3 : 4); }} className="w-full sm:w-1/2 py-3.5 bg-zinc-900 hover:bg-black text-white dark:bg-white dark:hover:bg-zinc-200 dark:text-black rounded-full font-bold text-sm shadow-md transition-transform hover:scale-[1.02]">
                           Continuar
                         </button>
-                        <button onClick={() => { setFlags(f => ({...f, exibirConfUri: false})); setValue("medico_profissional", ""); setValue("subtipo_exame", "");}} className="w-full sm:w-1/2 py-3.5 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-[#111111] rounded-xl font-medium text-sm transition-colors text-zinc-900 dark:text-white">
+                        <button onClick={() => { setFlags(f => ({...f, exibirConfUri: false})); setValue("medico_profissional", ""); setValue("subtipo_exame", "");}} className="w-full sm:w-1/2 py-3.5 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-[#111111] rounded-full font-medium text-sm transition-colors text-zinc-900 dark:text-white">
                           Selecionar outro profissional
                         </button>
                       </div>
@@ -863,21 +886,21 @@ function AgendamentoForm() {
                     <div className="flex flex-col md:flex-row gap-6 w-full">
                       <div className="w-full md:w-1/3 flex flex-col gap-3">
                         {[{id: "Consulta", i: User}, {id: "Retorno", i: Activity}, {id: "Exame", i: HeartPulse}].map(s => (
-                          <button key={s.id} onClick={() => { setValue("tipo_servico", s.id); setValue("medico_profissional", ""); setValue("subtipo_exame", ""); }} className={`p-4 rounded-xl flex items-center gap-4 border text-left w-full ${formData.tipo_servico === s.id ? "border-zinc-900 bg-zinc-50 dark:border-white dark:bg-[#111111]" : "border-zinc-200 dark:border-zinc-800"}`}><s.i size={18} className={formData.tipo_servico === s.id ? "" : "text-zinc-400"} /><span className={`text-sm ${formData.tipo_servico === s.id ? "font-semibold" : "font-medium"}`}>{s.id}</span></button>
+                          <button key={s.id} onClick={() => { setValue("tipo_servico", s.id); setValue("medico_profissional", ""); setValue("subtipo_exame", ""); }} className={`p-4 rounded-2xl flex items-center gap-4 border text-left w-full transition-all ${formData.tipo_servico === s.id ? "border-zinc-900 bg-zinc-50 dark:border-white dark:bg-[#111111] shadow-sm scale-[1.01]" : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300"}`}><s.i size={18} className={formData.tipo_servico === s.id ? "" : "text-zinc-400"} /><span className={`text-sm ${formData.tipo_servico === s.id ? "font-semibold" : "font-medium"}`}>{s.id}</span></button>
                         ))}
                       </div>
                       <div className="w-full md:w-2/3">
                         {["Consulta", "Retorno"].includes(formData.tipo_servico) && (
-                          <div><label className="text-[10px] font-bold text-zinc-400 uppercase mb-3 block">Corpo Clínico</label><div className="grid gap-3">
+                          <div><label className="text-[10px] font-bold text-zinc-400 uppercase mb-3 block tracking-widest">Corpo Clínico</label><div className="grid gap-3">
                             {servicosDB.filter(s => s.tipo === "Consulta").map(m => (
-                              <button key={m.id} onClick={() => setValue("medico_profissional", m.nome)} className={`p-4 border rounded-xl text-left text-sm ${formData.medico_profissional === m.nome ? "border-zinc-900 font-semibold bg-zinc-50 dark:border-white dark:bg-[#111111]" : "border-zinc-200 dark:border-zinc-800 font-medium text-zinc-600 dark:text-zinc-400"}`}>{m.nome}</button>
+                              <button key={m.id} onClick={() => setValue("medico_profissional", m.nome)} className={`p-4 border rounded-2xl text-left text-sm transition-all ${formData.medico_profissional === m.nome ? "border-zinc-900 font-semibold bg-zinc-50 dark:border-white dark:bg-[#111111] shadow-sm scale-[1.01]" : "border-zinc-200 dark:border-zinc-800 font-medium text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"}`}>{m.nome}</button>
                             ))}
                           </div></div>
                         )}
                         {formData.tipo_servico === "Exame" && (
-                          <div><label className="text-[10px] font-bold text-zinc-400 uppercase mb-3 block">Exames</label><div className="grid gap-3">
+                          <div><label className="text-[10px] font-bold text-zinc-400 uppercase mb-3 block tracking-widest">Exames</label><div className="grid gap-3">
                             {servicosDB.filter(s => s.tipo === "Exame").map(e => (
-                              <button key={e.id} onClick={() => setValue("subtipo_exame", e.nome)} className={`p-4 border rounded-xl text-left text-sm ${formData.subtipo_exame === e.nome ? "border-zinc-900 font-semibold bg-zinc-50 dark:border-white dark:bg-[#111111]" : "border-zinc-200 dark:border-zinc-800 font-medium text-zinc-600 dark:text-zinc-400"}`}>{e.nome}</button>
+                              <button key={e.id} onClick={() => setValue("subtipo_exame", e.nome)} className={`p-4 border rounded-2xl text-left text-sm transition-all ${formData.subtipo_exame === e.nome ? "border-zinc-900 font-semibold bg-zinc-50 dark:border-white dark:bg-[#111111] shadow-sm scale-[1.01]" : "border-zinc-200 dark:border-zinc-800 font-medium text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"}`}>{e.nome}</button>
                             ))}
                           </div></div>
                         )}
@@ -893,7 +916,7 @@ function AgendamentoForm() {
                   
                   <div className="space-y-6 mt-6">
                     {perguntasAtuais.map((pergunta, index) => (
-                      <div key={pergunta.id} className="p-6 bg-zinc-50 dark:bg-[#111111] border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                      <div key={pergunta.id} className="p-6 bg-zinc-50/80 dark:bg-[#111111]/80 border border-zinc-200/80 dark:border-zinc-800/80 rounded-3xl">
                         <h4 className="font-medium text-sm flex items-start gap-2 mb-4">
                           <HelpCircle size={18} className="text-zinc-400 shrink-0 mt-0.5" /> 
                           {pergunta.pergunta}
@@ -903,7 +926,7 @@ function AgendamentoForm() {
                             <button 
                               key={opcao.id} 
                               onClick={() => setRespostasTriagem(prev => ({...prev, [pergunta.id]: opcao}))}
-                              className={`p-3 text-sm text-left border rounded-xl transition-all ${respostasTriagem[pergunta.id]?.id === opcao.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800"}`}
+                              className={`p-3.5 text-sm text-left border rounded-2xl transition-all ${respostasTriagem[pergunta.id]?.id === opcao.id ? "bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-black dark:border-white shadow-md scale-[1.01]" : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"}`}
                             >
                               {opcao.texto_opcao}
                             </button>
@@ -919,11 +942,11 @@ function AgendamentoForm() {
                 <motion.div key="s4" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-lg mx-auto text-center space-y-6">
                   <div><h2 className="text-3xl font-medium">Garantia Financeira</h2><p className="text-zinc-500 text-sm mt-2">Escolha a cobertura.</p></div>
                   {formData.tipo_servico === "Retorno" ? (
-                    <div className="p-6 border rounded-2xl"><ShieldCheck className="w-8 h-8 mx-auto mb-4" /><h3 className="text-lg font-medium">Retorno Isento</h3><p className="text-sm text-zinc-500 mt-2">Dentro da janela regulamentar.</p></div>
+                    <div className="p-8 border rounded-3xl bg-zinc-50 dark:bg-[#111111]"><ShieldCheck className="w-10 h-10 mx-auto mb-4 text-zinc-400" /><h3 className="text-lg font-medium">Retorno Isento</h3><p className="text-sm text-zinc-500 mt-2">Dentro da janela regulamentar de 30 dias.</p></div>
                   ) : (
                     <div className="grid grid-cols-2 gap-4">
                       {[{id: "Convênio", i: ShieldCheck, lbl: "Convênio Médico"}, {id: "Particular", i: CreditCard, lbl: "Particular"}].map(m => (
-                        <button key={m.id} onClick={() => setValue("modalidade", m.id)} className={`p-6 border rounded-2xl flex flex-col items-center gap-4 ${formData.modalidade === m.id ? "border-zinc-900 bg-zinc-50 dark:border-white dark:bg-[#111111]" : "border-zinc-200 dark:border-zinc-800"}`}><m.i size={24} className={formData.modalidade === m.id ? "" : "text-zinc-400"} /><span className="font-medium text-sm">{m.lbl}</span></button>
+                        <button key={m.id} onClick={() => setValue("modalidade", m.id)} className={`p-6 border rounded-3xl flex flex-col items-center gap-4 transition-all ${formData.modalidade === m.id ? "border-zinc-900 bg-zinc-50 dark:border-white dark:bg-[#111111] shadow-md scale-[1.02]" : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300"}`}><m.i size={28} className={formData.modalidade === m.id ? "" : "text-zinc-400"} /><span className="font-medium text-sm">{m.lbl}</span></button>
                       ))}
                     </div>
                   )}
@@ -937,8 +960,8 @@ function AgendamentoForm() {
                     
                     <div className="w-full md:w-1/2">
                       <div className="flex justify-between items-center mb-6"><button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))} className="p-1.5"><ChevronLeft size={16}/></button><h3 className="font-medium text-sm capitalize">{calendarMonth.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</h3><button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))} className="p-1.5"><ChevronRight size={16}/></button></div>
-                      <div className="grid grid-cols-7 gap-1 text-center mb-2">{['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i} className="text-[10px] font-bold text-zinc-400 uppercase">{d}</div>)}</div>
-                      <div className="grid grid-cols-7 gap-1">
+                      <div className="grid grid-cols-7 gap-1 text-center mb-2">{['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i} className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{d}</div>)}</div>
+                      <div className="grid grid-cols-7 gap-1 md:gap-1.5">
                         {Array.from({ length: new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1).getDay() }).map((_, i) => <div key={`e-${i}`} className="aspect-square"/>)}
                         {Array.from({ length: new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate() }).map((_, i) => {
                           const d = i + 1, y = calendarMonth.getFullYear(), m = calendarMonth.getMonth();
@@ -955,7 +978,19 @@ function AgendamentoForm() {
                           const isSel = formData.data_agendamento === dateStr;
                           
                           return (
-                            <button key={d} disabled={isPastOrBlocked} onClick={() => setValue("data_agendamento", dateStr)} className={`aspect-square rounded-xl text-sm transition-all ${isPastOrBlocked ? "opacity-50 cursor-not-allowed text-zinc-300 dark:text-zinc-800" : isSel ? "bg-zinc-900 text-white dark:bg-white dark:text-black font-bold scale-105 shadow-md" : "hover:text-zinc-900 font-medium"}`}>{d}</button>
+                            <button 
+                              key={d} 
+                              disabled={isPastOrBlocked} 
+                              onClick={() => {
+                                setValue("data_agendamento", dateStr);
+                                setTimeout(() => {
+                                  timeSlotsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }, 150);
+                              }} 
+                              className={`aspect-square rounded-2xl text-sm transition-all duration-300 ${isPastOrBlocked ? "opacity-30 cursor-not-allowed text-zinc-400 dark:text-zinc-600" : isSel ? "bg-zinc-900 text-white dark:bg-white dark:text-black font-bold scale-[1.05] shadow-md" : "hover:bg-zinc-100 dark:hover:bg-zinc-800 font-medium active:scale-95"}`}
+                            >
+                              {d}
+                            </button>
                           );
                         })}
                       </div>
@@ -964,25 +999,25 @@ function AgendamentoForm() {
                     <div className="w-full md:w-1/2" ref={timeSlotsRef}>
                       {formData.data_agendamento ? (
                          <div>
-                           <div className="flex justify-between border-b pb-4 mb-4"><h4 className="font-medium text-sm">Horários</h4>{agenda.buscando && <Activity size={16} className="text-zinc-400 animate-spin"/>}</div>
-                           <div className="grid grid-cols-3 gap-2 overflow-y-auto max-h-[260px] pr-2">
+                           <div className="flex justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4 mb-4 pt-4 md:pt-0"><h4 className="font-medium text-sm">Horários</h4>{agenda.buscando && <Activity size={16} className="text-zinc-400 animate-spin"/>}</div>
+                           <div className="grid grid-cols-3 gap-2 overflow-y-auto max-h-[260px] pr-2 custom-scrollbar">
                              {HORARIOS_BASE.map(h => {
                                const off = agenda.ocupados.includes(h) || (formData.data_agendamento === helpers.getToday() && new Date().setHours(...h.split(':'),0,0) <= Date.now() + 3600000);
-                               return <button key={h} disabled={off} onClick={() => setValue("horario_agendamento", h)} className={`py-3 rounded-xl text-sm border ${off ? "border-transparent text-zinc-300 line-through cursor-not-allowed" : formData.horario_agendamento === h ? "bg-zinc-900 text-white dark:bg-white dark:text-black font-medium" : "border-zinc-200 dark:border-zinc-800"}`}>{h}</button>;
+                               return <button key={h} disabled={off} onClick={() => setValue("horario_agendamento", h)} className={`py-3.5 rounded-2xl text-sm border transition-all ${off ? "border-transparent text-zinc-300 dark:text-zinc-700 line-through cursor-not-allowed" : formData.horario_agendamento === h ? "bg-zinc-900 border-zinc-900 text-white dark:bg-white dark:border-white dark:text-black font-bold shadow-md scale-[1.02]" : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"}`}>{h}</button>;
                              })}
                            </div>
                          </div>
-                      ) : <div className="h-full border border-dashed rounded-2xl flex flex-col items-center justify-center text-zinc-500 min-h-[250px]"><CalendarIcon size={24} className="mb-4 opacity-50"/><p className="text-sm">Selecione uma data</p></div>}
+                      ) : <div className="h-full border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-zinc-500 min-h-[250px]"><CalendarIcon size={32} className="mb-4 opacity-40"/><p className="text-sm">Selecione uma data</p></div>}
                     </div>
                   </div>
                 </motion.div>
               )}
 
               {step === 6 && (
-                <motion.div key="s6" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-md mx-auto">
+                <motion.div key="s6" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-md mx-auto mt-6">
                   <div className="text-center mb-6"><h2 className="text-3xl font-medium">Checkout</h2><p className="text-zinc-500 text-sm mt-2">Ambiente seguro verificado.</p></div>
-                  <div className="p-8 rounded-3xl border bg-white dark:bg-[#0A0A0A] shadow-sm">
-                    <div className="flex justify-between border-b pb-4 mb-4"><span className="text-zinc-500 text-sm">{formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional}</span><span className="text-sm">R$ {(valorEntrada*2).toFixed(2)}</span></div>
+                  <div className="p-8 rounded-[32px] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0A] shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)]">
+                    <div className="flex justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4 mb-4"><span className="text-zinc-500 text-sm">{formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional}</span><span className="text-sm">R$ {(valorEntrada*2).toFixed(2)}</span></div>
                     <div className="flex justify-between items-center mb-8"><span className="font-medium">Reserva (50%)</span><span className="font-medium text-xl">R$ {valorEntrada.toFixed(2)}</span></div>
                     {process.env.NEXT_PUBLIC_MP_PUBLIC_KEY ? <Payment initialization={{ amount: valorEntrada > 0 ? valorEntrada : 1 }} onSubmit={onSubmitMP} customization={{ paymentMethods: { ticket: "all", bankTransfer: "all", creditCard: "all", debitCard: "all", mercadoPago: "all" }}} /> : <div className="p-4 bg-red-50 text-red-600 rounded-xl text-center text-sm">Credenciais Ausentes.</div>}
                   </div>
@@ -991,29 +1026,29 @@ function AgendamentoForm() {
 
               {step === 7 && (
                 <motion.div key="s7" initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} className="flex flex-col items-center justify-center text-center max-w-sm mx-auto py-8">
-                  <div className={`w-16 h-16 rounded-full ${pixData ? "bg-indigo-600" : "bg-zinc-900 dark:bg-white"} text-white ${!pixData && "dark:text-black"} flex items-center justify-center mb-6`}>
-                    {pixData ? <CreditCard size={32} /> : <CheckCircle size={32} />}
+                  <div className={`w-20 h-20 rounded-full ${pixData ? "bg-indigo-600" : "bg-zinc-900 dark:bg-white"} text-white ${!pixData && "dark:text-black"} flex items-center justify-center mb-6 shadow-xl`}>
+                    {pixData ? <CreditCard size={36} /> : <CheckCircle size={36} />}
                   </div>
                   
-                  <h2 className="text-3xl font-medium">{pixData ? "Finalize seu pagamento." : "Agendamento Confirmado."}</h2>
-                  <p className="text-zinc-500 mt-3 text-sm">
+                  <h2 className="text-3xl font-medium">{pixData ? "Finalize seu pagamento" : "Agendamento Confirmado"}</h2>
+                  <p className="text-zinc-500 mt-4 text-sm leading-relaxed">
                     {pixData 
                       ? `Sua vaga de ${formData.tipo_servico === "Exame" ? formData.subtipo_exame : formData.medico_profissional} para o dia ${formData.data_agendamento?.split("-").reverse().join("/")} às ${formData.horario_agendamento}h está pré-reservada. Efetue o pagamento para garantir o agendamento.` 
                       : `Seu agendamento para o dia ${formData.data_agendamento?.split("-").reverse().join("/")} às ${formData.horario_agendamento}h foi registrado com sucesso.`}
                   </p>
 
                   {pixData && (
-                    <div className="mt-8 p-6 rounded-2xl border w-full text-center bg-zinc-50 dark:bg-[#111111]">
-                      <h3 className="text-[11px] font-bold uppercase text-zinc-500 mb-4 tracking-widest">Escaneie o QR Code</h3>
-                      <img src={`data:image/jpeg;base64,${pixData.qr_code_base64}`} alt="QR Code Pix" className="w-48 h-48 mx-auto rounded-xl border p-2 bg-white" />
+                    <div className="mt-8 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-800 w-full text-center bg-zinc-50/50 dark:bg-[#111111]/50">
+                      <h3 className="text-[11px] font-bold uppercase text-zinc-500 mb-5 tracking-widest">Escaneie o QR Code</h3>
+                      <img src={`data:image/jpeg;base64,${pixData.qr_code_base64}`} alt="QR Code Pix" className="w-52 h-52 mx-auto rounded-2xl border border-zinc-200 p-2 bg-white shadow-sm" />
                       <div className="mt-6">
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase block mb-2">Ou use o Copia e Cola</span>
-                        <div className="flex bg-white dark:bg-black border rounded-xl p-2 items-center mb-6">
-                          <input readOnly value={pixData.qr_code} className="w-full text-xs bg-transparent outline-none text-zinc-500 px-2 truncate" />
-                          <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); showIsland("Código copiado!", "success"); }} className="bg-zinc-900 text-white dark:bg-white dark:text-black px-4 py-2 rounded-lg text-xs font-bold">Copiar</button>
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase block mb-2 tracking-wider">Ou use o Copia e Cola</span>
+                        <div className="flex bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 items-center mb-6 shadow-sm">
+                          <input readOnly value={pixData.qr_code} className="w-full text-xs bg-transparent outline-none text-zinc-500 px-3 truncate" />
+                          <button onClick={() => { navigator.clipboard.writeText(pixData.qr_code); showIsland("Código copiado!", "success"); }} className="bg-zinc-900 hover:bg-black text-white dark:bg-white dark:hover:bg-zinc-200 dark:text-black px-5 py-2.5 rounded-xl text-xs font-bold transition-colors">Copiar</button>
                         </div>
                         
-                        <div className="mt-4 flex flex-col items-center justify-center p-4 bg-white dark:bg-black rounded-xl border shadow-sm">
+                        <div className="mt-4 flex flex-col items-center justify-center p-5 bg-white dark:bg-[#0A0A0A] rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                             {timeLeft > 0 && <RefreshCw size={12} className="animate-spin text-zinc-400" />}
                             Verificação Automática
@@ -1027,18 +1062,18 @@ function AgendamentoForm() {
                     </div>
                   )}
 
-                  <div className="mt-8 p-6 rounded-2xl border w-full text-left bg-zinc-50 dark:bg-[#111111]">
-                    <div className="flex justify-between mb-4"><span className="text-[10px] font-bold text-zinc-500 uppercase">Paciente</span><span className="text-sm font-medium">{formData.nome}</span></div>
-                    <div className="flex justify-between border-t pt-4"><span className="text-[10px] font-bold text-zinc-500 uppercase">Status</span><span className="text-sm font-mono">{pixData ? "Aguardando Pagamento" : "Confirmado"}</span></div>
+                  <div className="mt-8 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-800 w-full text-left bg-zinc-50 dark:bg-[#111111]">
+                    <div className="flex justify-between mb-4"><span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Paciente</span><span className="text-sm font-medium">{formData.nome}</span></div>
+                    <div className="flex justify-between border-t border-zinc-200 dark:border-zinc-800 pt-4"><span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Status</span><span className="text-sm font-mono">{pixData ? "Aguardando Pagamento" : "Confirmado"}</span></div>
                   </div>
 
                   {!pixData && (
-                    <div className="mt-6 flex flex-col gap-3 w-full">
-                      <button onClick={() => window.open(`https://wa.me/5583999999999`, "_blank")} className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
+                    <div className="mt-8 flex flex-col gap-3 w-full">
+                      <button onClick={() => window.open(`https://wa.me/5583999999999`, "_blank")} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-full font-bold flex items-center justify-center gap-2 transition-transform hover:scale-[1.02]">
                         <MessageCircle size={18} />
                         Falar no WhatsApp
                       </button>
-                      <button onClick={() => window.location.reload()} className="w-full py-3.5 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-900 dark:text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-colors">
+                      <button onClick={() => window.location.reload()} className="w-full py-4 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-900 dark:text-white rounded-full font-medium flex items-center justify-center gap-2 transition-colors">
                         <CalendarPlus size={18} />
                         Realizar Novo Agendamento
                       </button>
@@ -1046,8 +1081,10 @@ function AgendamentoForm() {
                   )}
                 </motion.div>
               )}
+
             </AnimatePresence>
           </div>
+
         </motion.div>
       </div>
     </>
